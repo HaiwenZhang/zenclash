@@ -1,0 +1,531 @@
+use gpui::{
+    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement, Render, Styled, Window,
+};
+use gpui_component::{
+    button::Button, card::Card, h_flex, input::Input, select::Select, switch::Switch, tab::Tab,
+    tab_list::TabList, v_flex, ActiveTheme,
+};
+use serde::{Deserialize, Serialize};
+
+use super::Page;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SettingsTab {
+    #[default]
+    General,
+    Mihomo,
+    WebDav,
+    Shortcuts,
+    SubStore,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GeneralSettings {
+    pub language: String,
+    pub auto_launch: bool,
+    pub auto_check_update: bool,
+    pub silent_start: bool,
+    pub show_tray: bool,
+    pub show_floating_window: bool,
+    pub theme: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MihomoSettings {
+    pub delay_test_url: String,
+    pub delay_test_timeout: u32,
+    pub user_agent: String,
+    pub cpu_priority: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WebDavSettings {
+    pub url: String,
+    pub username: String,
+    pub password: String,
+    pub backup_cron: String,
+    pub auto_backup: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ShortcutSettings {
+    pub show_window: String,
+    pub toggle_sysproxy: String,
+    pub toggle_tun: String,
+    pub rule_mode: String,
+    pub global_mode: String,
+    pub direct_mode: String,
+}
+
+pub struct SettingsPage {
+    current_tab: SettingsTab,
+    general: GeneralSettings,
+    mihomo: MihomoSettings,
+    webdav: WebDavSettings,
+    shortcuts: ShortcutSettings,
+    changed: bool,
+    focus_handle: FocusHandle,
+}
+
+impl SettingsPage {
+    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self {
+            current_tab: SettingsTab::default(),
+            general: GeneralSettings {
+                language: "en".into(),
+                auto_launch: false,
+                auto_check_update: true,
+                silent_start: false,
+                show_tray: true,
+                show_floating_window: false,
+                theme: "system".into(),
+            },
+            mihomo: MihomoSettings {
+                delay_test_url: "https://www.gstatic.com/generate_204".into(),
+                delay_test_timeout: 5000,
+                user_agent: "".into(),
+                cpu_priority: "normal".into(),
+            },
+            webdav: WebDavSettings::default(),
+            shortcuts: ShortcutSettings {
+                show_window: "CmdOrCtrl+Shift+W".into(),
+                toggle_sysproxy: "CmdOrCtrl+Shift+S".into(),
+                toggle_tun: "CmdOrCtrl+Shift+T".into(),
+                rule_mode: "".into(),
+                global_mode: "".into(),
+                direct_mode: "".into(),
+            },
+            changed: false,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    fn render_general_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
+        v_flex()
+            .gap_2()
+            .p_4()
+            .rounded(theme.radius)
+            .bg(theme.card)
+            .border_1()
+            .border_color(theme.border)
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child("General"),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Language"))
+                    .child(
+                        h_flex()
+                            .gap_1()
+                            .children(["en", "zh-CN", "zh-TW"].iter().map(|lang| {
+                                let is_active = self.general.language == *lang;
+                                let lang_label = match *lang {
+                                    "en" => "English",
+                                    "zh-CN" => "简体中文",
+                                    "zh-TW" => "繁體中文",
+                                    _ => *lang,
+                                };
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(theme.radius)
+                                    .when(is_active, |this| {
+                                        this.bg(theme.primary).text_color(theme.primary_foreground)
+                                    })
+                                    .when(!is_active, |this| {
+                                        this.text_color(theme.muted_foreground)
+                                            .hover(|this| this.bg(theme.muted))
+                                    })
+                                    .text_xs()
+                                    .child(lang_label)
+                            })),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Auto Launch"))
+                    .child(
+                        Switch::new("auto-launch")
+                            .small()
+                            .checked(self.general.auto_launch),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Auto Check Update"))
+                    .child(
+                        Switch::new("auto-check-update")
+                            .small()
+                            .checked(self.general.auto_check_update),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Silent Start"))
+                    .child(
+                        Switch::new("silent-start")
+                            .small()
+                            .checked(self.general.silent_start),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Show Tray Icon"))
+                    .child(
+                        Switch::new("show-tray")
+                            .small()
+                            .checked(self.general.show_tray),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Show Floating Window"))
+                    .child(
+                        Switch::new("show-floating")
+                            .small()
+                            .checked(self.general.show_floating_window),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Theme"))
+                    .child(
+                        h_flex()
+                            .gap_1()
+                            .children(["system", "light", "dark"].iter().map(|t| {
+                                let is_active = self.general.theme == *t;
+                                let label = match *t {
+                                    "system" => "Auto",
+                                    "light" => "Light",
+                                    "dark" => "Dark",
+                                    _ => *t,
+                                };
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(theme.radius)
+                                    .when(is_active, |this| {
+                                        this.bg(theme.primary).text_color(theme.primary_foreground)
+                                    })
+                                    .when(!is_active, |this| {
+                                        this.text_color(theme.muted_foreground)
+                                            .hover(|this| this.bg(theme.muted))
+                                    })
+                                    .text_xs()
+                                    .child(label)
+                            })),
+                    ),
+            )
+    }
+
+    fn render_mihomo_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
+        v_flex()
+            .gap_2()
+            .p_4()
+            .rounded(theme.radius)
+            .bg(theme.card)
+            .border_1()
+            .border_color(theme.border)
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child("Mihomo Settings"),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Delay Test URL"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(self.mihomo.delay_test_url.clone()),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Delay Test Timeout"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(format!("{} ms", self.mihomo.delay_test_timeout)),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("CPU Priority"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(self.mihomo.cpu_priority.clone()),
+                    ),
+            )
+    }
+
+    fn render_webdav_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
+        v_flex()
+            .gap_2()
+            .p_4()
+            .rounded(theme.radius)
+            .bg(theme.card)
+            .border_1()
+            .border_color(theme.border)
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child("WebDAV Backup"),
+            )
+            .when(self.webdav.url.is_empty(), |this| {
+                this.child(
+                    div()
+                        .py_4()
+                        .text_center()
+                        .text_sm()
+                        .text_color(theme.muted_foreground)
+                        .child("Configure WebDAV to enable cloud backup"),
+                )
+            })
+            .when(!self.webdav.url.is_empty(), |this| {
+                this.child(
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .justify_between()
+                                .py_1()
+                                .child(div().text_xs().child("URL"))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme.muted_foreground)
+                                        .child(self.webdav.url.clone()),
+                                ),
+                        )
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .justify_between()
+                                .py_1()
+                                .child(div().text_xs().child("Username"))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme.muted_foreground)
+                                        .child(self.webdav.username.clone()),
+                                ),
+                        )
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .justify_between()
+                                .py_1()
+                                .child(div().text_xs().child("Auto Backup"))
+                                .child(
+                                    Switch::new("webdav-auto")
+                                        .xsmall()
+                                        .checked(self.webdav.auto_backup),
+                                ),
+                        ),
+                )
+            })
+            .child(
+                h_flex()
+                    .gap_2()
+                    .justify_end()
+                    .child(Button::new("webdav-config").xsmall().child("Configure"))
+                    .when(!self.webdav.url.is_empty(), |this| {
+                        this.child(Button::new("webdav-backup").xsmall().child("Backup Now"))
+                            .child(Button::new("webdav-restore").xsmall().child("Restore"))
+                    }),
+            )
+    }
+
+    fn render_shortcuts_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let shortcuts = [
+            ("Show Window", &self.shortcuts.show_window),
+            ("Toggle System Proxy", &self.shortcuts.toggle_sysproxy),
+            ("Toggle TUN", &self.shortcuts.toggle_tun),
+            ("Rule Mode", &self.shortcuts.rule_mode),
+            ("Global Mode", &self.shortcuts.global_mode),
+            ("Direct Mode", &self.shortcuts.direct_mode),
+        ];
+
+        v_flex()
+            .gap_2()
+            .p_4()
+            .rounded(theme.radius)
+            .bg(theme.card)
+            .border_1()
+            .border_color(theme.border)
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child("Keyboard Shortcuts"),
+            )
+            .children(shortcuts.into_iter().map(|(label, value)| {
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child(label))
+                    .when(value.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.muted_foreground)
+                                .child("Not set"),
+                        )
+                    })
+                    .when(!value.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .rounded(theme.radius)
+                                .bg(theme.muted)
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(value.clone()),
+                        )
+                    })
+            }))
+    }
+}
+
+impl Page for SettingsPage {
+    fn title() -> &'static str {
+        "Settings"
+    }
+
+    fn icon() -> gpui_component::icon::IconName {
+        gpui_component::icon::IconName::Settings
+    }
+}
+
+impl Focusable for SettingsPage {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for SettingsPage {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
+        v_flex()
+            .size_full()
+            .overflow_y_scroll()
+            .gap_4()
+            .p_4()
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("Settings"),
+                    )
+                    .child(
+                        Button::new("save")
+                            .child("Save")
+                            .primary()
+                            .when(!self.changed, |this| this.disabled(true)),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .gap_1()
+                    .p_1()
+                    .rounded(theme.radius)
+                    .bg(theme.muted)
+                    .children(
+                        [
+                            SettingsTab::General,
+                            SettingsTab::Mihomo,
+                            SettingsTab::WebDav,
+                            SettingsTab::Shortcuts,
+                        ]
+                        .into_iter()
+                        .map(|tab| {
+                            let is_active = self.current_tab == tab;
+                            let label = match tab {
+                                SettingsTab::General => "General",
+                                SettingsTab::Mihomo => "Mihomo",
+                                SettingsTab::WebDav => "WebDAV",
+                                SettingsTab::Shortcuts => "Shortcuts",
+                                SettingsTab::SubStore => "SubStore",
+                            };
+                            div()
+                                .px_3()
+                                .py_1()
+                                .rounded(theme.radius)
+                                .when(is_active, |this| {
+                                    this.bg(theme.background).text_color(theme.foreground)
+                                })
+                                .when(!is_active, |this| {
+                                    this.text_color(theme.muted_foreground)
+                                        .hover(|this| this.bg(theme.transparent))
+                                })
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .child(label)
+                        }),
+                    ),
+            )
+            .child(match self.current_tab {
+                SettingsTab::General => self.render_general_section(cx),
+                SettingsTab::Mihomo => self.render_mihomo_section(cx),
+                SettingsTab::WebDav => self.render_webdav_section(cx),
+                SettingsTab::Shortcuts => self.render_shortcuts_section(cx),
+                SettingsTab::SubStore => div().child("SubStore settings coming soon"),
+            })
+    }
+}

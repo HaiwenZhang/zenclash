@@ -1,0 +1,32 @@
+[package]
+name = "zenclash-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "GUI application for ZenClash using GPUI"
+keywords = ["gui", "proxy", "mihomo", "desktop", "zen"]
+categories = ["gui"]
+
+[[bin]]
+name = "zenclash"
+path = "src/main.rs"
+
+[dependencies]
+zenclash-core = { path = "../zenclash-core" }
+
+gpui = { workspace = true }
+gpui-component = { workspace = true }
+gpui-component-assets = { workspace = true }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[features]
+default = []
