@@ -1,15 +1,15 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, ClickEvent, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window,
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
     h_flex,
     sidebar::{Sidebar, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuItem},
-    switch::Switch,
-    v_flex, ActiveTheme, Icon, IconName, Side, Sizable,
+    v_flex, ActiveTheme, Icon, IconName, Side,
 };
-use std::rc::Rc;
+use zenclash_core::prelude::CoreState;
 
+use crate::app::{StartCore, StopCore};
 use crate::pages::Page;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -37,10 +37,7 @@ pub struct ZenSidebar {
     sysproxy_enabled: bool,
     tun_enabled: bool,
     outbound_mode: OutboundMode,
-    on_navigate: Option<Rc<dyn Fn(Page)>>,
-    on_toggle_sysproxy: Option<Rc<dyn Fn(bool)>>,
-    on_toggle_tun: Option<Rc<dyn Fn(bool)>>,
-    on_change_outbound_mode: Option<Rc<dyn Fn(OutboundMode)>>,
+    core_state: CoreState,
 }
 
 impl ZenSidebar {
@@ -51,10 +48,7 @@ impl ZenSidebar {
             sysproxy_enabled: false,
             tun_enabled: false,
             outbound_mode: OutboundMode::default(),
-            on_navigate: None,
-            on_toggle_sysproxy: None,
-            on_toggle_tun: None,
-            on_change_outbound_mode: None,
+            core_state: CoreState::Stopped,
         }
     }
 
@@ -83,23 +77,8 @@ impl ZenSidebar {
         self
     }
 
-    pub fn on_navigate(mut self, handler: impl Fn(Page) + 'static) -> Self {
-        self.on_navigate = Some(Rc::new(handler));
-        self
-    }
-
-    pub fn on_toggle_sysproxy(mut self, handler: impl Fn(bool) + 'static) -> Self {
-        self.on_toggle_sysproxy = Some(Rc::new(handler));
-        self
-    }
-
-    pub fn on_toggle_tun(mut self, handler: impl Fn(bool) + 'static) -> Self {
-        self.on_toggle_tun = Some(Rc::new(handler));
-        self
-    }
-
-    pub fn on_change_outbound_mode(mut self, handler: impl Fn(OutboundMode) + 'static) -> Self {
-        self.on_change_outbound_mode = Some(Rc::new(handler));
+    pub fn core_state(mut self, state: CoreState) -> Self {
+        self.core_state = state;
         self
     }
 }
@@ -113,10 +92,6 @@ impl Default for ZenSidebar {
 impl RenderOnce for ZenSidebar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let on_navigate = self.on_navigate.clone();
-        let on_toggle_sysproxy = self.on_toggle_sysproxy.clone();
-        let on_toggle_tun = self.on_toggle_tun.clone();
-        let on_change_mode = self.on_change_outbound_mode.clone();
 
         let pages = [
             Page::Proxies,
@@ -126,6 +101,22 @@ impl RenderOnce for ZenSidebar {
             Page::Logs,
             Page::Settings,
         ];
+
+        let is_running = self.core_state == CoreState::Running;
+        let state_color = match self.core_state {
+            CoreState::Running => theme.success,
+            CoreState::Starting => theme.warning,
+            CoreState::Stopping => theme.warning,
+            CoreState::Error => theme.danger,
+            CoreState::Stopped => theme.muted_foreground,
+        };
+        let state_text = match self.core_state {
+            CoreState::Running => "Running",
+            CoreState::Starting => "Starting...",
+            CoreState::Stopping => "Stopping...",
+            CoreState::Error => "Error",
+            CoreState::Stopped => "Stopped",
+        };
 
         Sidebar::<SidebarMenu>::new(Side::Left)
             .collapsed(self.collapsed)
@@ -173,28 +164,57 @@ impl RenderOnce for ZenSidebar {
             )
             .footer(
                 SidebarFooter::new()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .p_2()
+                            .child(div().size_2().rounded_full().bg(state_color))
+                            .when(!self.collapsed, |this| {
+                                this.child(div().flex_1().text_xs().child(state_text))
+                                    .child(
+                                        h_flex().gap_1().child(
+                                            div()
+                                                .id("toggle-core-btn")
+                                                .px_2()
+                                                .py_1()
+                                                .rounded(theme.radius)
+                                                .cursor_pointer()
+                                                .bg(if is_running {
+                                                    theme.danger
+                                                } else {
+                                                    theme.primary
+                                                })
+                                                .text_color(if is_running {
+                                                    theme.background
+                                                } else {
+                                                    theme.primary_foreground
+                                                })
+                                                .text_xs()
+                                                .child(if is_running { "Stop" } else { "Start" })
+                                                .on_click(move |_, window, cx| {
+                                                    if is_running {
+                                                        window.dispatch_action(
+                                                            Box::new(StopCore),
+                                                            cx,
+                                                        );
+                                                    } else {
+                                                        window.dispatch_action(
+                                                            Box::new(StartCore),
+                                                            cx,
+                                                        );
+                                                    }
+                                                }),
+                                        ),
+                                    )
+                            }),
+                    )
                     .child(SidebarMenu::new().children(pages.into_iter().map(|page| {
                         let is_active = self.current_page == page;
-                        let on_nav = on_navigate.clone();
                         SidebarMenuItem::new(page.label())
                             .icon(page.icon())
                             .active(is_active)
-                            .on_click(move |_, _, _| {
-                                if let Some(handler) = &on_nav {
-                                    handler(page);
-                                }
-                            })
-                    })))
-                    .child(
-                        SidebarMenuItem::new("Settings")
-                            .icon(IconName::Settings)
-                            .active(self.current_page == Page::Settings)
-                            .on_click(move |_, _, _| {
-                                if let Some(handler) = &on_navigate {
-                                    handler(Page::Settings);
-                                }
-                            }),
-                    ),
+                    }))),
             )
     }
 }

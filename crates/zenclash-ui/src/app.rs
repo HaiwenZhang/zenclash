@@ -6,14 +6,14 @@ use gpui::{
     Window, WindowBounds, WindowOptions,
 };
 use gpui_component::{h_flex, v_flex, ActiveTheme, Root, Theme, ThemeMode, TitleBar};
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
 
 use crate::components::sidebar::{OutboundMode, ZenSidebar};
 use crate::pages::{
     backup::BackupPage, connections::ConnectionsPage, dns::DnsPage, logs::LogsPage,
     profiles::ProfilesPage, proxies::ProxiesPage, rules::RulesPage, settings::SettingsPage, Page,
 };
-use zenclash_core::prelude::{AppConfig, CoreManager};
+use zenclash_core::prelude::{AppConfig, CoreManager, CoreState};
 
 actions!(
     zenclash,
@@ -30,12 +30,15 @@ actions!(
         NavigateBackup,
         ToggleSysProxy,
         ToggleTun,
+        StartCore,
+        StopCore,
     ]
 );
 
 pub struct ZenClashApp {
     core_manager: Arc<RwLock<CoreManager>>,
     config: Arc<RwLock<AppConfig>>,
+    core_state: CoreState,
     current_page: Page,
     sidebar_collapsed: bool,
     sidebar_width: gpui::Pixels,
@@ -60,9 +63,9 @@ impl ZenClashApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let proxies_page = cx.new(|cx| ProxiesPage::new(window, cx));
+        let proxies_page = cx.new(|cx| ProxiesPage::new(core_manager.clone(), window, cx));
         let profiles_page = cx.new(|cx| ProfilesPage::new(window, cx));
-        let connections_page = cx.new(|cx| ConnectionsPage::new(cx));
+        let connections_page = cx.new(|cx| ConnectionsPage::new(core_manager.clone(), cx));
         let rules_page = cx.new(|cx| RulesPage::new(window, cx));
         let logs_page = cx.new(|cx| LogsPage::new(cx));
         let settings_page = cx.new(|cx| SettingsPage::new(cx));
@@ -72,6 +75,7 @@ impl ZenClashApp {
         Self {
             core_manager,
             config,
+            core_state: CoreState::Stopped,
             current_page: Page::default(),
             sidebar_collapsed: false,
             sidebar_width: px(220.),
@@ -95,6 +99,52 @@ impl ZenClashApp {
         cx.notify();
     }
 
+    pub fn core_state(&self) -> CoreState {
+        self.core_state
+    }
+
+    pub fn start_core(&self, cx: &mut Context<Self>) {
+        let core_manager = self.core_manager.clone();
+        cx.spawn(async move |this, cx| {
+            let result = {
+                let manager = core_manager.read();
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        manager.start().await
+                    })
+                })
+            };
+            
+            if let Err(e) = result {
+                eprintln!("Failed to start core: {}", e);
+            }
+            
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+
+    pub fn stop_core(&self, cx: &mut Context<Self>) {
+        let core_manager = self.core_manager.clone();
+        cx.spawn(async move |this, cx| {
+            let result = {
+                let manager = core_manager.read();
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        manager.stop().await
+                    })
+                })
+            };
+            
+            if let Err(e) = result {
+                eprintln!("Failed to stop core: {}", e);
+            }
+            
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
         self.sidebar_collapsed = !self.sidebar_collapsed;
         cx.notify();
@@ -106,12 +156,16 @@ impl ZenClashApp {
         let enabled = self.sysproxy_enabled;
 
         cx.spawn(async move |_, _| {
-            let manager = core_manager.read().await;
-            if enabled {
-                manager.enable_sysproxy().await.ok();
-            } else {
-                manager.disable_sysproxy().await.ok();
-            }
+            let manager = core_manager.read();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    if enabled {
+                        manager.enable_sysproxy().await.ok();
+                    } else {
+                        manager.disable_sysproxy().await.ok();
+                    }
+                })
+            });
         })
         .detach();
 
@@ -124,12 +178,16 @@ impl ZenClashApp {
         let enabled = self.tun_enabled;
 
         cx.spawn(async move |_, _| {
-            let manager = core_manager.read().await;
-            if enabled {
-                manager.enable_tun().await.ok();
-            } else {
-                manager.disable_tun().await.ok();
-            }
+            let manager = core_manager.read();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    if enabled {
+                        manager.enable_tun().await.ok();
+                    } else {
+                        manager.disable_tun().await.ok();
+                    }
+                })
+            });
         })
         .detach();
 
@@ -141,13 +199,17 @@ impl ZenClashApp {
         let core_manager = self.core_manager.clone();
 
         cx.spawn(async move |_, _| {
-            let manager = core_manager.read().await;
+            let manager = core_manager.read();
             let mode_str = match mode {
                 OutboundMode::Rule => "rule",
                 OutboundMode::Global => "global",
                 OutboundMode::Direct => "direct",
             };
-            manager.set_mode(mode_str).await.ok();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    manager.set_mode(mode_str).await.ok();
+                })
+            });
         })
         .detach();
 
@@ -213,6 +275,14 @@ impl ZenClashApp {
         self.toggle_tun(cx);
     }
 
+    fn on_start_core(&mut self, _: &StartCore, _: &mut Window, cx: &mut Context<Self>) {
+        self.start_core(cx);
+    }
+
+    fn on_stop_core(&mut self, _: &StopCore, _: &mut Window, cx: &mut Context<Self>) {
+        self.stop_core(cx);
+    }
+
     fn on_quit(&mut self, _: &Quit, _: &mut Window, cx: &mut Context<Self>) {
         cx.quit();
     }
@@ -224,6 +294,7 @@ impl ZenClashApp {
             .sysproxy_enabled(self.sysproxy_enabled)
             .tun_enabled(self.tun_enabled)
             .outbound_mode(self.outbound_mode)
+            .core_state(self.core_state)
     }
 
     fn render_content(&self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {

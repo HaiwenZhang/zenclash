@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use gpui::{prelude::FluentBuilder, InteractiveElement, AppContext,
-    div, px, App, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+use gpui::{prelude::FluentBuilder, InteractiveElement,
+    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
     Render, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
@@ -9,14 +9,14 @@ use gpui_component::{
     h_flex,
     input::{Input, InputState},
     v_flex,
-    VirtualList,
     ActiveTheme, Disableable, Icon, IconName, Sizable,
 };
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
 
-use zenclash_core::prelude::{ApiClientConfig, CoreManager, DelayTestResult, DelayTester, ProxyGroup};
+use zenclash_core::prelude::{CoreManager, DelayTestResult, ProxyGroup, ProxyType};
 
 pub struct ProxiesPage {
+    core_manager: Arc<RwLock<CoreManager>>,
     proxy_groups: Vec<ProxyGroup>,
     selected_group: Option<String>,
     selected_proxy: Option<String>,
@@ -27,8 +27,9 @@ pub struct ProxiesPage {
 }
 
 impl ProxiesPage {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
+            core_manager,
             proxy_groups: Vec::new(),
             selected_group: None,
             selected_proxy: None,
@@ -52,15 +53,77 @@ impl ProxiesPage {
         cx.notify();
     }
 
+    pub fn refresh_proxies(&mut self, cx: &mut Context<Self>) {
+        let core_manager = self.core_manager.clone();
+        cx.spawn(async move |this, cx| {
+            let manager = core_manager.read();
+            let result = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    manager.get_proxies().await
+                })
+            });
+            
+            if let Ok(response) = result {
+                let groups: Vec<ProxyGroup> = response
+                    .proxies
+                    .into_iter()
+                    .filter(|(_, proxy)| {
+                        let t = proxy.proxy_type.to_lowercase();
+                        t == "selector" || t == "urltest" || t == "fallback" || t == "loadbalance"
+                    })
+                    .map(|(name, proxy)| {
+                        use std::collections::HashMap;
+                        ProxyGroup {
+                            name,
+                            group_type: zenclash_core::prelude::ProxyType::Selector,
+                            proxies: proxy.all.unwrap_or_default(),
+                            url: None,
+                            interval: None,
+                            tolerance: None,
+                            lazy: None,
+                            timeout: None,
+                            use_count: None,
+                            use_providers: vec![],
+                            current: proxy.now,
+                            extra: HashMap::new(),
+                        }
+                    })
+                    .collect();
+                
+                let _ = this.update(cx, |this, cx| {
+                    this.proxy_groups = groups;
+                    if this.selected_group.is_none() {
+                        this.selected_group = this.proxy_groups.first().map(|g| g.name.clone());
+                    }
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
     pub fn select_proxy(&mut self, group_name: String, proxy_name: String, cx: &mut Context<Self>) {
         self.selected_group = Some(group_name.clone());
         self.selected_proxy = Some(proxy_name.clone());
-        cx.notify();
+        
+        let core_manager = self.core_manager.clone();
+        let group = group_name.clone();
+        let proxy = proxy_name.clone();
+        cx.spawn(async move |_, _| {
+            let manager = core_manager.read();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    let _ = manager.select_proxy(&group, &proxy).await;
+                })
+            });
+        })
+        .detach();
 
         cx.emit(ProxyPageEvent::ProxySelected {
             group: group_name,
             proxy: proxy_name,
         });
+        cx.notify();
     }
 
     pub fn test_delay(&mut self, cx: &mut Context<Self>) {
@@ -72,30 +135,25 @@ impl ProxiesPage {
         cx.notify();
 
         let groups = self.proxy_groups.clone();
+        let core_manager = self.core_manager.clone();
         cx.spawn(async move |this, cx| {
-            use zenclash_core::prelude::ApiClient;
-            let client = match ApiClient::new(ApiClientConfig::default()) {
-                Ok(c) => c,
-                Err(_) => {
-                    this.update(cx, |this, cx| {
-                        this.is_testing_delay = false;
-                        cx.notify();
-                    })
-                    .ok();
-                    return;
-                }
-            };
-            let tester = DelayTester::new_default(client);
-
+            let manager = core_manager.read();
+            
             for group in &groups {
                 for proxy in &group.proxies {
-                    let result = tester.test_single(proxy).await;
-                    this.update(cx, |this, cx| {
-                        this.delay_results
-                            .insert(proxy.clone(), result.delay.unwrap_or(0));
-                        cx.notify();
-                    })
-                    .ok();
+                    let result = tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            manager.delay_test(proxy, None, None).await
+                        })
+                    });
+                    if let Ok(delay_result) = result {
+                        this.update(cx, |this, cx| {
+                            this.delay_results
+                                .insert(proxy.clone(), delay_result.delay);
+                            cx.notify();
+                        })
+                        .ok();
+                    }
                 }
             }
 

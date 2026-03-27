@@ -352,6 +352,20 @@ impl CoreManager {
 
         Ok(())
     }
+
+    pub async fn close_connection(&self, id: &str) -> Result<(), CoreManagerError> {
+        let client = self.api_client.read().await;
+        let client = client.as_ref().ok_or(CoreManagerError::NotRunning)?;
+
+        client.close_connection(id).await.map_err(Into::into)
+    }
+
+    pub async fn close_all_connections(&self) -> Result<(), CoreManagerError> {
+        let client = self.api_client.read().await;
+        let client = client.as_ref().ok_or(CoreManagerError::NotRunning)?;
+
+        client.close_all_connections().await.map_err(Into::into)
+    }
 }
 
 #[cfg(test)]
