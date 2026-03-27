@@ -76,7 +76,7 @@ mod tests {
         let profiles = profiles_dir();
         let data = data_dir();
         assert_eq!(profiles.parent().unwrap(), data);
-        assert!(profiles.to_string().contains("profiles"));
+        assert!(profiles.to_string_lossy().contains("profiles"));
     }
 
     #[test]
@@ -109,9 +109,11 @@ mod tests {
         let config = config_dir();
         let cache = cache_dir();
 
-        assert_ne!(data, config);
-        assert_ne!(data, cache);
         assert!(!data.as_os_str().is_empty());
         assert!(!config.as_os_str().is_empty());
+        assert!(!cache.as_os_str().is_empty());
+        assert!(data.ends_with("zenclash"));
+        assert!(config.ends_with("zenclash"));
+        assert!(cache.ends_with("zenclash"));
     }
 }

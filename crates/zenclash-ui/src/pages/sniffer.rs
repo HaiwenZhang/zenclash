@@ -1,13 +1,12 @@
-use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, IntoElement, Model, ParentElement,
-    Render, Styled, Window,
+use gpui::{AppContext, InteractiveElement, 
+    div, prelude::FluentBuilder, px, App, Context, Entity, IntoElement, ParentElement, Render,
+    Styled, Window,
 };
-use gpui_component::{
-    button::Button, h_flex, input::TextInput, switch::Switch, v_flex, ActiveTheme,
-};
+use gpui_component::{Sizable, button::{Button, ButtonVariants}, h_flex, input::Input, switch::Switch, v_flex, ActiveTheme};
 use serde::{Deserialize, Serialize};
 
 use super::Page;
+use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SnifferProtocolConfig {
@@ -36,7 +35,7 @@ pub struct SnifferSettings {
     pub skip_src_address: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnifferProtocols {
     #[serde(default)]
     pub HTTP: SnifferProtocolConfig,
@@ -66,14 +65,14 @@ impl Default for SnifferProtocols {
 }
 
 pub struct SnifferPage {
-    settings: Model<SnifferSettings>,
+    settings: Entity<SnifferSettings>,
     changed: bool,
 }
 
 impl SnifferPage {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            settings: cx.new_model(|_| SnifferSettings {
+            settings: cx.new(|_| SnifferSettings {
                 enable: true,
                 parse_pure_ip: true,
                 force_dns_mapping: true,
@@ -100,7 +99,7 @@ impl SnifferPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -115,7 +114,7 @@ impl SnifferPage {
                     .justify_between()
                     .py_2()
                     .child(div().text_sm().child("Enable Sniffer"))
-                    .child(Switch::new("enable").small().checked(settings.enable)),
+                    .child(Switch::new("enable").with_size(gpui_component::Size::Small).checked(settings.enable)),
             )
             .child(
                 h_flex()
@@ -125,7 +124,7 @@ impl SnifferPage {
                     .child(div().text_sm().child("Override Destination"))
                     .child(
                         Switch::new("override-dest")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.override_destination),
                     ),
             )
@@ -137,7 +136,7 @@ impl SnifferPage {
                     .child(div().text_sm().child("Force DNS Mapping"))
                     .child(
                         Switch::new("force-dns")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.force_dns_mapping),
                     ),
             )
@@ -149,7 +148,7 @@ impl SnifferPage {
                     .child(div().text_sm().child("Parse Pure IP"))
                     .child(
                         Switch::new("parse-pure-ip")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.parse_pure_ip),
                     ),
             )
@@ -163,7 +162,7 @@ impl SnifferPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -241,7 +240,7 @@ impl SnifferPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -297,13 +296,13 @@ impl SnifferPage {
     }
 }
 
-impl Page for SnifferPage {
+impl PageTrait for SnifferPage {
     fn title() -> &'static str {
         "Sniffer"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::Search
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::Search
     }
 }
 
@@ -313,7 +312,7 @@ impl Render for SnifferPage {
 
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(

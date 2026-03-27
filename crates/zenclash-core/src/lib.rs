@@ -17,12 +17,12 @@ pub mod prelude {
     pub use crate::config::{
         AppConfig, AppConfigPatch, DnsConfig, MihomoConfig, OverrideConfig, OverrideItem,
         ProfileConfig, ProfileItem, ProfileType, Rule, RuleProvider, RuleType, SubscriptionInfo,
-        TunConfig,
+        TunConfig, FallbackFilter,
     };
     pub use crate::core::{
-        ApiClient, ApiClientConfig, ConfigFactory, CoreManager, CoreManagerConfig, CoreState,
-        DnsManager, FactoryError, LogStream, Process, ProcessConfig, ProcessState, ProfileUpdater,
-        SubStoreClient, TrafficData, TrafficStream,
+        ApiClient, ApiClientConfig, ConfigFactory, ConnectionItem, CoreManager, CoreManagerConfig,
+        CoreState, DnsManager, FactoryError, LogItem, LogStream, Process, ProcessConfig,
+        ProcessState, ProfileUpdater, SubStoreClient, TrafficData, TrafficStream,
     };
     pub use crate::error::{Result, ZenClashError};
     pub use crate::proxy::{
@@ -36,8 +36,9 @@ pub mod prelude {
         default_bypass, ProxyConfig, ProxyMode, SysproxyError, SystemProxyManager,
     };
     pub use crate::utils::{
-        cache_dir, config_dir, core_log_path, data_dir, format_speed, format_traffic, profiles_dir,
-        setup_default_logger, setup_logger, HttpClient, HttpClientConfig, LogLevel, LoggerConfig,
+        cache_dir, calc_percent, config_dir, core_log_path, data_dir, format_relative_time,
+        format_speed, format_traffic, profiles_dir, setup_default_logger, setup_logger, HttpClient,
+        HttpClientConfig, LogLevel, LoggerConfig,
     };
 }
 

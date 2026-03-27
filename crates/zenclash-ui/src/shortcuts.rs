@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use gpui::{actions, div, App, Context, IntoElement, ParentElement, Render, Styled, Window};
+use gpui::{prelude::FluentBuilder, InteractiveElement, SharedString, actions, div, App, Context, IntoElement, ParentElement, Render, Styled, Window};
 use gpui_component::{
-    button::Button,
+    button::{Button, ButtonVariants},
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectState},
@@ -10,7 +10,7 @@ use gpui_component::{
     v_flex, ActiveTheme,
 };
 
-use zenclash_core::AppConfig;
+use zenclash_core::prelude::AppConfig;
 
 actions!(
     zenclash_shortcuts,
@@ -138,6 +138,8 @@ impl ShortcutsPage {
         let shortcut = self.shortcuts.get(key).cloned().unwrap_or_default();
         let is_recording = self.recording.as_ref() == Some(&key.to_string());
         let key = key.to_string();
+        let key_for_clear = key.clone();
+        let label = label.to_string();
 
         h_flex()
             .gap_4()
@@ -158,16 +160,16 @@ impl ShortcutsPage {
                             })
                             .child(if shortcut.is_empty() {
                                 if is_recording {
-                                    "Press keys..."
+                                    "Press keys...".to_string()
                                 } else {
-                                    "Not set"
+                                    "Not set".to_string()
                                 }
                             } else {
-                                &shortcut
+                                shortcut.clone()
                             }),
                     )
                     .child(
-                        Button::new(format!("record-{}", key))
+                        Button::new(SharedString::from(format!("record-{}", key)))
                             .label(if is_recording { "Stop" } else { "Record" })
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 if is_recording {
@@ -178,12 +180,12 @@ impl ShortcutsPage {
                             })),
                     )
                     .child(
-                        Button::new(format!("clear-{}", key))
+                        Button::new(SharedString::from(format!("clear-{}", key_for_clear)))
                             .ghost()
                             .label("Clear")
                             .when(!shortcut.is_empty(), |this| this)
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                this.set_shortcut(key.clone(), String::new(), cx);
+                                this.set_shortcut(key_for_clear.clone(), String::new(), cx);
                             })),
                     ),
             )

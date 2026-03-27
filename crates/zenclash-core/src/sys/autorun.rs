@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]

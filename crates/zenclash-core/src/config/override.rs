@@ -170,33 +170,33 @@ impl OverrideItem {
                     if let Some(v) = value.as_str() {
                         config.mode = v.to_string();
                     }
-                },
+                }
                 "log_level" => {
                     if let Some(v) = value.as_str() {
                         config.log_level = v.to_string();
                     }
-                },
+                }
                 "allow_lan" => {
                     if let Some(v) = value.as_bool() {
                         config.allow_lan = v;
                     }
-                },
+                }
                 "ipv6" => {
                     if let Some(v) = value.as_bool() {
                         config.ipv6 = v;
                     }
-                },
+                }
                 "unified_delay" => {
                     if let Some(v) = value.as_bool() {
                         config.unified_delay = v;
                     }
-                },
+                }
                 "tcp_concurrent" => {
                     if let Some(v) = value.as_bool() {
                         config.tcp_concurrent = v;
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
         Ok(())

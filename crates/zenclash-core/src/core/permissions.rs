@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 #[derive(Debug, thiserror::Error)]
 pub enum PermissionError {
     #[error("Failed to grant TUN permission: {0}")]
@@ -44,9 +42,18 @@ impl PermissionManager {
             .unwrap_or(false)
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn check_admin_unix() -> bool {
         unsafe { libc::getuid() == 0 }
+    }
+
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn check_admin_unix() -> bool {
+        std::process::Command::new("id")
+            .arg("-u")
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+            .unwrap_or(false)
     }
 
     pub fn grant_tun_permission() -> Result<(), PermissionError> {

@@ -1,4 +1,6 @@
-use gpui::{px, App, KeyBinding, Window, WindowBounds, WindowOptions};
+use gpui::{
+    px, App, AppContext, BorrowAppContext, KeyBinding, Window, WindowBounds, WindowOptions,
+};
 use gpui_component::TitleBar;
 
 use crate::app::WindowConfig;
@@ -56,6 +58,8 @@ pub struct FloatingWindowState {
     pub position: Option<(f32, f32)>,
 }
 
+impl gpui::Global for FloatingWindowState {}
+
 impl Default for FloatingWindowState {
     fn default() -> Self {
         Self {
@@ -75,6 +79,6 @@ impl FloatingWindow {
     }
 
     pub fn is_visible(cx: &App) -> bool {
-        cx.read_global::<FloatingWindowState>().show_traffic
+        cx.read_global(|state: &FloatingWindowState, _| state.show_traffic)
     }
 }

@@ -136,24 +136,25 @@ pub fn data_dir() -> PathBuf {
 }
 
 pub struct UpdaterManager {
-    state: Model<UpdaterState>,
+    state: Entity<UpdaterState>,
 }
 
 impl UpdaterManager {
-    pub fn new(cx: &mut AppContext) -> Self {
-        let state = cx.new_model(|_| UpdaterState::new());
+    pub fn new(cx: &mut App) -> Self {
+        let state = cx.new(|_| UpdaterState::new());
         Self { state }
     }
 
-    pub fn state(&self) -> Model<UpdaterState> {
+    pub fn state(&self) -> Entity<UpdaterState> {
         self.state.clone()
     }
 
     pub async fn check_update(
         &self,
-        cx: &mut AsyncAppContext,
+        cx: &mut AsyncApp,
     ) -> Result<Option<AppVersion>, ZenClashError> {
-        let client = HttpClient::new(HttpClientConfig::default());
+        let client = HttpClient::new(HttpClientConfig::default())
+            .map_err(|e| ZenClashError::Http(e))?;
 
         let response = client
             .get_text("https://github.com/zenclash/zenclash/releases/latest/download/latest.yml")
@@ -161,7 +162,7 @@ impl UpdaterManager {
             .map_err(|e| ZenClashError::Network(e.to_string()))?;
 
         let version: AppVersion =
-            serde_yaml::from_str(&response).map_err(|e| ZenClashError::Parse(e.to_string()))?;
+            serde_yaml::from_str(&response).map_err(|e| ZenClashError::Yaml(e))?;
 
         let current = env!("CARGO_PKG_VERSION");
 
@@ -186,7 +187,7 @@ impl UpdaterManager {
     pub async fn download_update(
         &self,
         version: &str,
-        cx: &mut AsyncAppContext,
+        cx: &mut AsyncApp,
     ) -> Result<PathBuf, ZenClashError> {
         let filename = get_platform_update_filename(version).ok_or_else(|| {
             ZenClashError::Config("Platform not supported for auto-update".into())
@@ -214,7 +215,8 @@ impl UpdaterManager {
             })
             .ok();
 
-        let client = HttpClient::new(HttpClientConfig::default());
+        let client = HttpClient::new(HttpClientConfig::default())
+            .map_err(|e| ZenClashError::Http(e))?;
         let data = client
             .get_bytes(&url)
             .await
@@ -361,14 +363,11 @@ impl ThemeManager {
         std::fs::write(&path, css).map_err(|e| ZenClashError::Io(e))
     }
 
-    pub async fn fetch_themes(proxy_port: u16) -> Result<(), ZenClashError> {
+    pub async fn fetch_themes(_proxy_port: u16) -> Result<(), ZenClashError> {
         let url = "https://github.com/zenclash/theme-hub/releases/download/latest/themes.zip";
 
-        let client_config = HttpClientConfig {
-            proxy: Some(format!("http://127.0.0.1:{}", proxy_port)),
-            ..Default::default()
-        };
-        let client = HttpClient::new(client_config);
+        let client = HttpClient::new(HttpClientConfig::default())
+            .map_err(|e| ZenClashError::Http(e))?;
 
         let data = client
             .get_bytes(url)
@@ -380,10 +379,10 @@ impl ThemeManager {
 
         let reader = std::io::Cursor::new(&data);
         let mut archive =
-            zip::ZipArchive::new(reader).map_err(|e| ZenClashError::Parse(e.to_string()))?;
+            zip::ZipArchive::new(reader).map_err(|e| ZenClashError::Unknown(e.to_string()))?;
 
         for i in 0..archive.len() {
-            let mut file = archive.by_index(i).map_err(|e| ZenClashError::Io(e))?;
+            let mut file = archive.by_index(i).map_err(|e| ZenClashError::Io(std::io::Error::other(e)))?;
             let outpath = match file.enclosed_name() {
                 Some(path) => themes_path.join(path),
                 None => continue,
@@ -422,7 +421,7 @@ impl ThemeManager {
 
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| ZenClashError::Time(e.to_string()))?
+            .map_err(|e| ZenClashError::Unknown(e.to_string()))?
             .as_secs();
 
         let dest_name = format!("{:x}-{}", timestamp, filename);

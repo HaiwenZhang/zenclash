@@ -1,16 +1,22 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
+    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
-    button::Button, card::Card, h_flex, input::TextInput, switch::Switch, tab::Tab,
-    tab_list::TabList, v_flex, ActiveTheme,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    switch::Switch,
+    tab::Tab,
+    tab::TabBar,
+    v_flex, ActiveTheme, Disableable, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
 use super::Page;
+use crate::pages::PageTrait;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ProxyMode {
     #[default]
     Off,
@@ -55,7 +61,7 @@ pub struct SysproxyPage {
 }
 
 impl SysproxyPage {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             settings: cx.new(|_| SysproxySettings::default()),
             enabled: false,
@@ -109,7 +115,7 @@ impl SysproxyPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -183,7 +189,7 @@ impl SysproxyPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -206,10 +212,11 @@ impl SysproxyPage {
                     ),
             )
             .child(
-                h_flex()
-                    .gap_2()
-                    .justify_end()
-                    .child(Button::new("edit-pac").xsmall().child("Edit PAC Script")),
+                h_flex().gap_2().justify_end().child(
+                    Button::new("edit-pac")
+                        .with_size(gpui_component::Size::XSmall)
+                        .child("Edit PAC Script"),
+                ),
             )
     }
 
@@ -220,7 +227,7 @@ impl SysproxyPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -251,19 +258,23 @@ impl SysproxyPage {
                                     .text_xs()
                                     .child(if self.enabled { "Enabled" } else { "Disabled" }),
                             )
-                            .child(Switch::new("sysproxy-toggle").small().checked(self.enabled)),
+                            .child(
+                                Switch::new("sysproxy-toggle")
+                                    .with_size(gpui_component::Size::Small)
+                                    .checked(self.enabled),
+                            ),
                     ),
             )
     }
 }
 
-impl Page for SysproxyPage {
+impl PageTrait for SysproxyPage {
     fn title() -> &'static str {
         "System Proxy"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::Globe
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::Globe
     }
 }
 
@@ -275,12 +286,12 @@ impl Focusable for SysproxyPage {
 
 impl Render for SysproxyPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let settings = self.settings.read(cx);
+        let theme = cx.theme().clone();
+        let settings = self.settings.read(cx).clone();
 
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(

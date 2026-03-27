@@ -1,6 +1,12 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, IntoElement, ParentElement, RenderOnce, Styled, Window,
+};
 use gpui_component::{
-    button::Button, card::Card, chip::Chip, h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable,
+    button::{Button, ButtonVariants},
+    h_flex,
+    scroll::ScrollableElement,
+    tag::Tag,
+    v_flex, ActiveTheme, Icon, IconName, Sizable,
 };
 
 use super::ConnectionInfo;
@@ -37,7 +43,12 @@ impl ConnectionDetail {
         self
     }
 
-    fn render_field(&self, label: &str, value: &str, theme: &gpui::Theme) -> impl IntoElement {
+    fn render_field(
+        &self,
+        label: &str,
+        value: &str,
+        theme: &gpui_component::Theme,
+    ) -> impl IntoElement {
         h_flex()
             .gap_2()
             .items_start()
@@ -46,9 +57,9 @@ impl ConnectionDetail {
                     .w(px(100.))
                     .text_xs()
                     .text_color(theme.muted_foreground)
-                    .child(label),
+                    .child(label.to_string()),
             )
-            .child(div().flex_1().text_sm().child(value))
+            .child(div().flex_1().text_sm().child(value.to_string()))
     }
 
     fn generate_rule(&self) -> String {
@@ -83,12 +94,12 @@ impl ConnectionDetail {
 }
 
 impl RenderOnce for ConnectionDetail {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let rule = self.generate_rule();
 
-        let upload = zenclash_core::format_traffic(self.info.upload);
-        let download = zenclash_core::format_traffic(self.info.download);
+        let upload = zenclash_core::prelude::format_traffic(self.info.upload);
+        let download = zenclash_core::prelude::format_traffic(self.info.download);
         let start_time = chrono::DateTime::from_timestamp(self.info.start, 0)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_default();
@@ -98,21 +109,20 @@ impl RenderOnce for ConnectionDetail {
         let on_copy_rule = self.on_copy_rule.take();
 
         div()
-            .fixed()
+            .relative()
             .inset_0()
             .bg(theme.background.opacity(0.8))
             .flex()
             .items_center()
             .justify_center()
-            .z_index(1000)
             .child(
-                Card::new()
+                div()
                     .w(px(500.))
                     .max_h(px(600.))
                     .p_4()
                     .gap_4()
                     .shadow_xl()
-                    .overflow_y_scroll()
+                    .overflow_y_scrollbar()
                     .child(
                         h_flex()
                             .justify_between()
@@ -125,8 +135,8 @@ impl RenderOnce for ConnectionDetail {
                             )
                             .child(
                                 Button::new("close")
-                                    .xsmall()
-                                    .icon(Icon::new(IconName::X))
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .icon(Icon::new(IconName::Close))
                                     .on_click(move |_, _, _| {
                                         if let Some(handler) = &on_close {
                                             handler();
@@ -138,12 +148,12 @@ impl RenderOnce for ConnectionDetail {
                         h_flex()
                             .gap_2()
                             .child(
-                                Chip::new()
-                                    .small()
-                                    .dot(if self.info.is_active {
-                                        theme.success
+                                Tag::new()
+                                    .with_size(gpui_component::Size::Small)
+                                    .with_variant(if self.info.is_active {
+                                        gpui_component::tag::TagVariant::Success
                                     } else {
-                                        theme.destructive
+                                        gpui_component::tag::TagVariant::Danger
                                     })
                                     .child(if self.info.is_active {
                                         "Active"
@@ -151,11 +161,16 @@ impl RenderOnce for ConnectionDetail {
                                         "Closed"
                                     }),
                             )
-                            .child(Chip::new().small().outlined().child(format!(
-                                "{}({})",
-                                self.info.metadata.conn_type,
-                                self.info.metadata.network.to_uppercase()
-                            ))),
+                            .child(
+                                Tag::new()
+                                    .with_size(gpui_component::Size::Small)
+                                    .outline()
+                                    .child(format!(
+                                        "{}({})",
+                                        self.info.metadata.conn_type,
+                                        self.info.metadata.network.to_uppercase()
+                                    )),
+                            ),
                     )
                     .child(
                         v_flex()

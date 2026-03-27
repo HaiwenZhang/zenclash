@@ -1,8 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, ClickEvent, IntoElement, RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder, px, App, ClickEvent, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
-    button::Button, card::Card, h_flex, label::Label, v_flex, ActiveTheme, Icon, IconName, Sizable,
+    button::Button, h_flex, label::Label, v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
@@ -98,9 +99,9 @@ impl ProxyItem {
         self
     }
 
-    fn delay_color(&self, theme: &gpui::Theme) -> gpui::Hsla {
+    fn delay_color(&self, theme: &gpui_component::Theme) -> gpui::Hsla {
         match self.proxy.delay {
-            Some(d) if d <= 0 => theme.destructive,
+            Some(d) if d <= 0 => theme.danger,
             Some(d) if d < 500 => theme.success,
             Some(_) => theme.warning,
             None => theme.muted_foreground,
@@ -116,7 +117,7 @@ impl ProxyItem {
         }
     }
 
-    fn render_protocol_tags(&self, theme: &gpui::Theme) -> impl IntoElement {
+    fn render_protocol_tags(&self, theme: &gpui_component::Theme) -> impl IntoElement {
         let mut tags: Vec<&str> = vec![];
 
         if self.proxy.tfo {
@@ -148,7 +149,7 @@ impl ProxyItem {
 }
 
 impl RenderOnce for ProxyItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let delay_color = self.delay_color(theme);
         let delay_text = self.delay_text();
@@ -167,7 +168,8 @@ impl RenderOnce for ProxyItem {
             theme.transparent
         };
 
-        Card::new()
+        div()
+            .id("proxy-item")
             .p_1()
             .border_l_2()
             .border_r_2()
@@ -192,8 +194,8 @@ impl RenderOnce for ProxyItem {
                                 .child(h_flex().gap_1().when(self.is_fixed, |this| {
                                     this.child(
                                         Button::new("unpin")
-                                            .xsmall()
-                                            .icon(Icon::new(IconName::Pin))
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .icon(Icon::new(IconName::Star))
                                             .on_click(move |_, _, _| {
                                                 if let Some(handler) = &on_unpin {
                                                     handler();
@@ -223,10 +225,10 @@ impl RenderOnce for ProxyItem {
                                 )
                                 .child(
                                     Button::new("delay")
-                                        .xsmall()
+                                        .with_size(gpui_component::Size::XSmall)
                                         .when(self.is_testing, |this| this.disabled(true))
                                         .text_color(delay_color)
-                                        .child(delay_text)
+                                        .child(delay_text.clone())
                                         .on_click(move |_, _, _| {
                                             if let Some(handler) = &on_delay_test {
                                                 handler();
@@ -255,13 +257,13 @@ impl RenderOnce for ProxyItem {
                                 .when(self.is_fixed, |this| {
                                     this.child(
                                         Button::new("unpin")
-                                            .xsmall()
-                                            .icon(Icon::new(IconName::Pin)),
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .icon(Icon::new(IconName::Star)),
                                     )
                                 })
                                 .child(
                                     Button::new("delay")
-                                        .xsmall()
+                                        .with_size(gpui_component::Size::XSmall)
                                         .when(self.is_testing, |this| this.disabled(true))
                                         .text_color(delay_color)
                                         .child(delay_text),

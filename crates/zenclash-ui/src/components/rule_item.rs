@@ -1,7 +1,9 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, SharedString, Styled, Window,
+};
 use gpui_component::{
-    button::Button, card::Card, chip::Chip, h_flex, switch::Switch, ActiveTheme, Icon, IconName,
-    Sizable,
+    button::Button, h_flex, switch::Switch, tag::Tag, ActiveTheme, Icon, IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
@@ -40,28 +42,28 @@ impl RuleItem {
         self
     }
 
-    fn rule_color(&self, theme: &gpui::Theme) -> gpui::Hsla {
+    fn rule_color(&self, theme: &gpui_component::Theme) -> gpui::Hsla {
         match self.info.rule_type.as_str() {
             "DOMAIN" | "DOMAIN-SUFFIX" | "DOMAIN-KEYWORD" => theme.primary,
             "IP-CIDR" | "IP-CIDR6" | "SRC-IP-CIDR" => theme.warning,
             "GEOIP" | "GEOSITE" => theme.success,
             "PROCESS-NAME" | "PROCESS-PATH" => theme.secondary,
             "DST-PORT" | "SRC-PORT" => theme.info,
-            "MATCH" => theme.destructive,
+            "MATCH" => theme.danger,
             _ => theme.muted_foreground,
         }
     }
 }
 
 impl RenderOnce for RuleItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let rule_color = self.rule_color(theme);
 
         let on_toggle = self.on_toggle.take();
         let on_delete = self.on_delete.take();
 
-        Card::new()
+        div()
             .p_3()
             .gap_2()
             .when(!self.info.enabled, |this| this.opacity(0.5))
@@ -70,8 +72,8 @@ impl RenderOnce for RuleItem {
                     .gap_3()
                     .items_center()
                     .child(
-                        Switch::new(&self.info.id)
-                            .xsmall()
+                        Switch::new(SharedString::from(self.info.id.clone()))
+                            .with_size(gpui_component::Size::XSmall)
                             .checked(self.info.enabled)
                             .on_click(move |checked, _, _| {
                                 if let Some(handler) = &on_toggle {
@@ -80,10 +82,9 @@ impl RenderOnce for RuleItem {
                             }),
                     )
                     .child(
-                        Chip::new()
-                            .xsmall()
-                            .outlined()
-                            .text_color(rule_color)
+                        Tag::new()
+                            .with_size(gpui_component::Size::XSmall)
+                            .outline()
                             .child(self.info.rule_type.clone()),
                     )
                     .child(
@@ -114,10 +115,9 @@ impl RenderOnce for RuleItem {
                         )
                     })
                     .child(
-                        Button::new(format!("delete-{}", self.info.id))
-                            .xsmall()
-                            .icon(Icon::new(IconName::Trash))
-                            .text_color(theme.destructive)
+                        Button::new(SharedString::from(format!("delete-{}", self.info.id)))
+                            .with_size(gpui_component::Size::XSmall)
+                            .icon(Icon::new(IconName::Delete))
                             .on_click(move |_, _, _| {
                                 if let Some(handler) = &on_delete {
                                     handler();

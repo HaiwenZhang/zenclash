@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 pub mod app;
 pub mod mihomo;
 pub mod r#override;
@@ -8,13 +10,13 @@ mod tests;
 
 pub use app::{AppConfig, AppConfigPatch};
 pub use mihomo::{
-    DnsConfig, DnsMode, FakeIpFilter, FallbackFilter, GeoXUrl, HealthCheckConfig, ListenerConfig,
-    MihomoConfig, MihomoMode, ProfileSettings, ProxyConfig, ProxyGroupConfig, ProxyProviderConfig,
-    RuleProviderConfig, ScriptConfig, TunConfig, TunMode, TunStack,
+    DnsConfig, FallbackFilter, GeoXUrl, HealthCheckConfig, ListenerConfig, MihomoConfig,
+    ProfileSettings, ProxyConfig, ProxyGroupConfig, ProxyProviderConfig, RuleProviderConfig,
+    ScriptConfig, TunConfig,
 };
 pub use profile::{ProfileConfig, ProfileExtra, ProfileItem, ProfileType, SubscriptionInfo};
 pub use r#override::{
-    MixinRule, OverrideConfig, OverrideError, OverrideItem, OverrideRule, OverrideType, ScriptRule,
+    MixinRule, OverrideConfig, OverrideError, OverrideItem, OverrideRule, ScriptRule,
 };
 
 /// Rule type enumeration for Clash routing rules

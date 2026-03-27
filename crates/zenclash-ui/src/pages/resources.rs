@@ -1,11 +1,14 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, IntoElement, Model, ParentElement,
-    Render, Styled, Window,
+    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
-use gpui_component::{button::Button, card::Card, h_flex, progress::Progress, v_flex, ActiveTheme};
+use gpui_component::{
+    button::Button, h_flex, progress::Progress, v_flex, ActiveTheme, Disableable, Sizable,
+};
 use serde::{Deserialize, Serialize};
 
 use super::Page;
+use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GeoDataInfo {
@@ -46,16 +49,16 @@ pub struct ProviderInfo {
 }
 
 pub struct ResourcesPage {
-    geo_data: Model<Vec<GeoDataInfo>>,
-    proxy_providers: Model<Vec<ProviderInfo>>,
-    rule_providers: Model<Vec<ProviderInfo>>,
-    updating_geo: Model<Option<GeoType>>,
+    geo_data: Entity<Vec<GeoDataInfo>>,
+    proxy_providers: Entity<Vec<ProviderInfo>>,
+    rule_providers: Entity<Vec<ProviderInfo>>,
+    updating_geo: Entity<Option<GeoType>>,
 }
 
 impl ResourcesPage {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            geo_data: cx.new_model(|_| {
+            geo_data: cx.new(|_| {
                 vec![
                     GeoDataInfo {
                         name: "Country.mmdb".into(),
@@ -73,9 +76,9 @@ impl ResourcesPage {
                     },
                 ]
             }),
-            proxy_providers: cx.new_model(|_| Vec::new()),
-            rule_providers: cx.new_model(|_| Vec::new()),
-            updating_geo: cx.new_model(|_| None),
+            proxy_providers: cx.new(|_| Vec::new()),
+            rule_providers: cx.new(|_| Vec::new()),
+            updating_geo: cx.new(|_| None),
         }
     }
 
@@ -98,7 +101,7 @@ impl ResourcesPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -114,7 +117,7 @@ impl ResourcesPage {
                     .child(
                         Button::new("update-geo")
                             .child("Update All")
-                            .when(updating.is_some(), |this| this.disabled()),
+                            .when(updating.is_some(), |this| this.disabled(true)),
                     ),
             )
             .children(geo_data.iter().map(|geo| {
@@ -135,7 +138,7 @@ impl ResourcesPage {
                                         div()
                                             .text_sm()
                                             .font_weight(gpui::FontWeight::MEDIUM)
-                                            .child(&geo.name),
+                                            .child(div().child(geo.name.clone())),
                                     )
                                     .child(
                                         div()
@@ -148,15 +151,15 @@ impl ResourcesPage {
                                     ),
                             )
                             .child(
-                                Button::new(format!("update-{}", geo.name))
-                                    .xsmall()
+                                Button::new(SharedString::from(format!("update-{}", geo.name)))
+                                    .with_size(gpui_component::Size::XSmall)
                                     .child("Update")
                                     .when(
                                         updating
                                             .as_ref()
                                             .map(|t| *t == geo.geo_type)
                                             .unwrap_or(false),
-                                        |this| this.disabled(),
+                                        |this| this.disabled(true),
                                     ),
                             ),
                     )
@@ -188,7 +191,7 @@ impl ResourcesPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -199,11 +202,11 @@ impl ResourcesPage {
                         div()
                             .text_sm()
                             .font_weight(gpui::FontWeight::MEDIUM)
-                            .child(title),
+                            .child(title.to_string()),
                     )
                     .child(
-                        Button::new(format!("update-{}-all", title))
-                            .xsmall()
+                        Button::new(SharedString::from(format!("update-{}-all", title)))
+                            .with_size(gpui_component::Size::XSmall)
                             .child("Update All"),
                     ),
             )
@@ -231,7 +234,9 @@ impl ResourcesPage {
                                 h_flex()
                                     .gap_2()
                                     .items_center()
-                                    .child(div().text_sm().child(&provider.name))
+                                    .child(
+                                        div().text_sm().child(div().child(provider.name.clone())),
+                                    )
                                     .child(
                                         div()
                                             .text_xs()
@@ -240,9 +245,12 @@ impl ResourcesPage {
                                     ),
                             )
                             .child(
-                                Button::new(format!("update-provider-{}", provider.name))
-                                    .xsmall()
-                                    .child("Update"),
+                                Button::new(SharedString::from(format!(
+                                    "update-provider-{}",
+                                    provider.name
+                                )))
+                                .with_size(gpui_component::Size::XSmall)
+                                .child("Update"),
                             ),
                     )
                     .when_some(provider.updated_at.as_ref(), |this, date| {
@@ -257,25 +265,25 @@ impl ResourcesPage {
     }
 }
 
-impl Page for ResourcesPage {
+impl PageTrait for ResourcesPage {
     fn title() -> &'static str {
         "Resources"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::Database
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::Inbox
     }
 }
 
 impl Render for ResourcesPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let proxy_providers = self.proxy_providers.read(cx);
-        let rule_providers = self.rule_providers.read(cx);
+        let theme = cx.theme().clone();
+        let proxy_providers = self.proxy_providers.read(cx).clone();
+        let rule_providers = self.rule_providers.read(cx).clone();
 
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(
@@ -285,7 +293,7 @@ impl Render for ResourcesPage {
                     .child("Resources"),
             )
             .child(self.render_geo_section(cx))
-            .child(self.render_provider_section("Proxy Providers", proxy_providers, cx))
-            .child(self.render_provider_section("Rule Providers", rule_providers, cx))
+            .child(self.render_provider_section("Proxy Providers", &proxy_providers, cx))
+            .child(self.render_provider_section("Rule Providers", &rule_providers, cx))
     }
 }

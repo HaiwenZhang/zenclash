@@ -1,7 +1,8 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
-use gpui_component::{
-    card::Card, chip::Chip, h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable,
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
+use gpui_component::{h_flex, tag::Tag, v_flex, ActiveTheme, Icon, IconName, Sizable};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,9 +73,9 @@ impl LogItem {
         self
     }
 
-    fn level_color(&self, theme: &gpui::Theme) -> gpui::Hsla {
+    fn level_color(&self, theme: &gpui_component::Theme) -> gpui::Hsla {
         match self.info.level() {
-            LogLevel::Error => theme.destructive,
+            LogLevel::Error => theme.danger,
             LogLevel::Warning => theme.warning,
             LogLevel::Info => theme.primary,
             LogLevel::Debug => theme.muted_foreground,
@@ -84,10 +85,10 @@ impl LogItem {
 
     fn level_icon(&self) -> IconName {
         match self.info.level() {
-            LogLevel::Error => IconName::X,
-            LogLevel::Warning => IconName::AlertTriangle,
+            LogLevel::Error => IconName::Close,
+            LogLevel::Warning => IconName::TriangleAlert,
             LogLevel::Info => IconName::Info,
-            LogLevel::Debug => IconName::Bug,
+            LogLevel::Debug => IconName::Settings,
             LogLevel::Silent => IconName::Minus,
         }
     }
@@ -109,7 +110,7 @@ impl RenderOnce for LogItem {
             .gap_2()
             .p_2()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .items_start()
@@ -121,15 +122,25 @@ impl RenderOnce for LogItem {
                 }
             })
             .child(
-                Chip::new()
-                    .xsmall()
-                    .outlined()
-                    .icon(Icon::new(self.level_icon()))
-                    .text_color(level_color)
-                    .child(self.info.level().as_str()),
+                h_flex()
+                    .gap_1()
+                    .items_center()
+                    .child(
+                        Icon::new(self.level_icon())
+                            .text_color(level_color)
+                            .size_3(),
+                    )
+                    .child(
+                        Tag::new()
+                            .with_size(gpui_component::Size::XSmall)
+                            .outline()
+                            .text_color(level_color)
+                            .child(self.info.level().as_str()),
+                    ),
             )
             .child(
                 div()
+                    .id("payload")
                     .flex_1()
                     .text_sm()
                     .font_family("monospace")

@@ -1,7 +1,12 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, Styled, Window,
+};
 use gpui_component::{
-    button::Button, card::Card, h_flex, input::TextInput, v_flex, ActiveTheme, Icon, IconName,
-    Sizable,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    v_flex, ActiveTheme, Icon, IconName, Sizable,
 };
 
 pub struct ConfirmModal {
@@ -67,22 +72,21 @@ impl ConfirmModal {
 }
 
 impl RenderOnce for ConfirmModal {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
 
         let on_confirm = self.on_confirm.take();
         let on_cancel = self.on_cancel.take();
 
         div()
-            .fixed()
+            .relative()
             .inset_0()
             .bg(theme.background.opacity(0.8))
             .flex()
             .items_center()
             .justify_center()
-            .z_index(1000)
             .child(
-                Card::new()
+                div()
                     .w(px(400.))
                     .p_4()
                     .gap_4()
@@ -202,28 +206,27 @@ impl EditModal {
 }
 
 impl RenderOnce for EditModal {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
 
         let on_save = self.on_save.take();
         let on_cancel = self.on_cancel.take();
 
         div()
-            .fixed()
+            .relative()
             .inset_0()
             .bg(theme.background.opacity(0.8))
             .flex()
             .items_center()
             .justify_center()
-            .z_index(1000)
             .child(
-                Card::new()
+                div()
                     .w(px(480.))
                     .max_h(px(600.))
                     .p_4()
                     .gap_4()
                     .shadow_xl()
-                    .overflow_y_scroll()
+                    .overflow_y_hidden()
                     .child(
                         div()
                             .text_lg()
@@ -308,20 +311,19 @@ impl InfoModal {
 }
 
 impl RenderOnce for InfoModal {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let on_close = self.on_close.take();
 
         div()
-            .fixed()
+            .relative()
             .inset_0()
             .bg(theme.background.opacity(0.8))
             .flex()
             .items_center()
             .justify_center()
-            .z_index(1000)
             .child(
-                Card::new()
+                div()
                     .w(px(400.))
                     .p_4()
                     .gap_4()

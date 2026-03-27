@@ -1,5 +1,5 @@
-use crate::core::{ApiClient, ApiClientConfig, CoreManager, CoreState, Process, ProcessConfig};
-use std::time::Duration;
+use crate::core::{ApiClient, ApiClientConfig, CoreManager, CoreManagerConfig, CoreState, Process, ProcessConfig};
+use std::path::PathBuf;
 
 #[test]
 fn test_api_client_config_default() {
@@ -19,16 +19,22 @@ fn test_api_client_config_with_secret() {
 }
 
 #[test]
-fn test_process_config_default() {
-    let config = ProcessConfig::default();
-    assert!(config.core_path.to_string().contains("mihomo"));
-    assert!(config.work_dir.to_string().contains("zenclash"));
+fn test_process_config() {
+    let config = ProcessConfig::new(PathBuf::from("/usr/bin/mihomo"))
+        .args(vec!["-d".to_string(), "/tmp".to_string()])
+        .work_dir(PathBuf::from("/tmp"));
+
+    assert_eq!(config.path, PathBuf::from("/usr/bin/mihomo"));
+    assert_eq!(config.args.len(), 2);
 }
 
 #[tokio::test]
-async fn test_core_manager_state() {
-    let manager = CoreManager::new();
-    assert_eq!(manager.state(), CoreState::Stopped);
+async fn test_process_state_initial() {
+    let config = ProcessConfig::new(PathBuf::from("/bin/echo"));
+    let process = Process::new(config);
+    use crate::core::ProcessState;
+    assert_eq!(process.state().await, ProcessState::Stopped);
+    assert!(!process.is_running().await);
 }
 
 #[test]
@@ -38,7 +44,7 @@ fn test_core_state_transitions() {
     let states = vec![Stopped, Starting, Running, Stopping, Error];
 
     for state in states {
-        let display = format!("{}", state);
+        let display = format!("{:?}", state);
         assert!(!display.is_empty());
     }
 }
@@ -58,40 +64,35 @@ fn test_traffic_data_creation() {
 fn test_connection_item_creation() {
     let conn = crate::core::ConnectionItem {
         id: "conn-123".to_string(),
-        source: "192.168.1.1:54321".to_string(),
-        destination: "8.8.8.8:443".to_string(),
-        proxy: "SG-Node-1".to_string(),
-        rule: "MATCH".to_string(),
-        chain: vec!["SG-Node-1".to_string()],
+        metadata: crate::core::ConnectionMetadata {
+            network: "tcp".to_string(),
+            conn_type: "HTTP".to_string(),
+            host: Some("example.com".to_string()),
+            source_ip: "192.168.1.1".to_string(),
+            source_port: "54321".to_string(),
+            destination_ip: Some("8.8.8.8".to_string()),
+            destination_port: "443".to_string(),
+            process: None,
+            process_path: None,
+        },
         upload: 1024,
         download: 2048,
-        start_time: std::time::SystemTime::now(),
+        start: "2024-01-01T00:00:00Z".to_string(),
+        chains: vec!["SG-Node-1".to_string()],
+        rule: Some("MATCH".to_string()),
     };
 
     assert_eq!(conn.id, "conn-123");
-    assert_eq!(conn.proxy, "SG-Node-1");
-    assert!(conn.chain.contains(&"SG-Node-1".to_string()));
+    assert!(conn.chains.contains(&"SG-Node-1".to_string()));
 }
 
 #[test]
 fn test_log_item_parsing() {
     let log = crate::core::LogItem {
         level: "info".to_string(),
-        message: "Core started".to_string(),
-        timestamp: std::time::SystemTime::now(),
+        payload: "Core started".to_string(),
     };
 
     assert_eq!(log.level, "info");
-    assert_eq!(log.message, "Core started");
-}
-
-#[test]
-fn test_memory_data() {
-    let mem = crate::core::MemoryData {
-        inuse: 1024000,
-        oslimit: 512000000,
-    };
-
-    assert!(mem.inuse > 0);
-    assert!(mem.oslimit > mem.inuse);
+    assert_eq!(log.payload, "Core started");
 }

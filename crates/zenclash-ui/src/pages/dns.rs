@@ -1,9 +1,9 @@
 use gpui::{
-    div, App, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window,
+    div, prelude::FluentBuilder, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
-    button::Button,
+    button::{Button, ButtonVariants},
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectState},
@@ -11,7 +11,7 @@ use gpui_component::{
     v_flex, ActiveTheme,
 };
 
-use zenclash_core::{DnsConfig, DnsMode, FakeIpFilter, FallbackFilter};
+use zenclash_core::prelude::{DnsConfig, FallbackFilter};
 
 pub struct DnsPage {
     config: DnsConfig,
@@ -22,13 +22,10 @@ pub struct DnsPage {
 
 impl DnsPage {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let new_nameserver = cx.new(|cx| InputState::new(window, cx).placeholder("8.8.8.8"));
-        let new_fallback = cx.new(|cx| InputState::new(window, cx).placeholder("tls://dns.google"));
-
         Self {
             config: DnsConfig::default(),
-            new_nameserver,
-            new_fallback,
+            new_nameserver: cx.new(|cx| InputState::new(window, cx)),
+            new_fallback: cx.new(|cx| InputState::new(window, cx)),
             focus_handle: cx.focus_handle(),
         }
     }
@@ -41,17 +38,15 @@ impl DnsPage {
     pub fn add_nameserver(&mut self, cx: &mut Context<Self>) {
         let server = self.new_nameserver.read(cx).text().to_string();
         if !server.is_empty() {
-            self.config.nameservers.push(server);
-            self.new_nameserver.update(cx, |state, _| {
-                state.set_text("");
-            });
+            self.config.nameserver.push(server);
+            self.new_nameserver.update(cx, |state, _| {});
             cx.notify();
         }
     }
 
     pub fn remove_nameserver(&mut self, index: usize, cx: &mut Context<Self>) {
-        if index < self.config.nameservers.len() {
-            self.config.nameservers.remove(index);
+        if index < self.config.nameserver.len() {
+            self.config.nameserver.remove(index);
             cx.notify();
         }
     }
@@ -59,18 +54,20 @@ impl DnsPage {
     pub fn add_fallback(&mut self, cx: &mut Context<Self>) {
         let server = self.new_fallback.read(cx).text().to_string();
         if !server.is_empty() {
-            self.config.fallback.push(server);
-            self.new_fallback.update(cx, |state, _| {
-                state.set_text("");
-            });
+            self.config
+                .fallback
+                .get_or_insert_with(Vec::new)
+                .push(server);
             cx.notify();
         }
     }
 
     pub fn remove_fallback(&mut self, index: usize, cx: &mut Context<Self>) {
-        if index < self.config.fallback.len() {
-            self.config.fallback.remove(index);
-            cx.notify();
+        if let Some(ref mut fallback) = self.config.fallback {
+            if index < fallback.len() {
+                fallback.remove(index);
+                cx.notify();
+            }
         }
     }
 
@@ -84,8 +81,8 @@ impl DnsPage {
         cx.notify();
     }
 
-    pub fn set_mode(&mut self, mode: DnsMode, cx: &mut Context<Self>) {
-        self.config.mode = mode;
+    pub fn set_mode(&mut self, mode: String, cx: &mut Context<Self>) {
+        self.config.enhanced_mode = mode;
         cx.notify();
     }
 }
@@ -115,25 +112,27 @@ impl Render for DnsPage {
                             .gap_4()
                             .child(div().w_32().child("Enable DNS"))
                             .child(
-                                Switch::new("enable-dns", self.config.enable.into()).on_click(
-                                    cx.listener(|this, _, _, cx| {
+                                Switch::new("enable-dns")
+                                    .checked(self.config.enable)
+                                    .on_click(cx.listener(|this, _, _, cx| {
                                         this.toggle_dns(cx);
-                                    }),
-                                ),
+                                    })),
                             ),
                     )
-                    .child(h_flex().gap_4().child(div().w_32().child("IPv6")).child(
-                        Switch::new("enable-ipv6", self.config.ipv6.into()).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.toggle_ipv6(cx);
-                            },
-                        )),
-                    ))
+                    .child(
+                        h_flex().gap_4().child(div().w_32().child("IPv6")).child(
+                            Switch::new("enable-ipv6")
+                                .checked(self.config.ipv6)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.toggle_ipv6(cx);
+                                })),
+                        ),
+                    )
                     .child(
                         h_flex()
                             .gap_4()
                             .child(div().w_32().child("Listen"))
-                            .child(div().child(self.config.listen.clone())),
+                            .child(div().child(self.config.listen.clone().unwrap_or_default())),
                     )
                     .child(
                         h_flex().gap_4().child(div().w_32().child("Mode")).child(
@@ -141,32 +140,32 @@ impl Render for DnsPage {
                                 .gap_2()
                                 .child(
                                     Button::new("mode-normal")
-                                        .when(self.config.mode == DnsMode::Normal, |this| {
+                                        .when(self.config.enhanced_mode == "normal", |this| {
                                             this.primary()
                                         })
                                         .label("Normal")
                                         .on_click(cx.listener(|this, _, _, cx| {
-                                            this.set_mode(DnsMode::Normal, cx);
+                                            this.set_mode("normal".to_string(), cx);
                                         })),
                                 )
                                 .child(
                                     Button::new("mode-fakeip")
-                                        .when(self.config.mode == DnsMode::FakeIp, |this| {
+                                        .when(self.config.enhanced_mode == "fake-ip", |this| {
                                             this.primary()
                                         })
                                         .label("Fake-IP")
                                         .on_click(cx.listener(|this, _, _, cx| {
-                                            this.set_mode(DnsMode::FakeIp, cx);
+                                            this.set_mode("fake-ip".to_string(), cx);
                                         })),
                                 )
                                 .child(
                                     Button::new("mode-redir")
-                                        .when(self.config.mode == DnsMode::RedirHost, |this| {
+                                        .when(self.config.enhanced_mode == "redir-host", |this| {
                                             this.primary()
                                         })
                                         .label("Redir-Host")
                                         .on_click(cx.listener(|this, _, _, cx| {
-                                            this.set_mode(DnsMode::RedirHost, cx);
+                                            this.set_mode("redir-host".to_string(), cx);
                                         })),
                                 ),
                         ),
@@ -183,7 +182,7 @@ impl Render for DnsPage {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(Input::new(&self.new_nameserver, window, cx))
+                            .child(Input::new(&self.new_nameserver))
                             .child(Button::new("add-nameserver").label("Add").on_click(
                                 cx.listener(|this, _, _, cx| {
                                     this.add_nameserver(cx);
@@ -193,18 +192,21 @@ impl Render for DnsPage {
                     .child(
                         v_flex()
                             .gap_1()
-                            .children(self.config.nameservers.iter().enumerate().map(
+                            .children(self.config.nameserver.iter().enumerate().map(
                                 |(i, server)| {
                                     h_flex()
                                         .gap_2()
                                         .child(div().flex_1().child(server.clone()))
                                         .child(
-                                            Button::new(format!("remove-ns-{}", i))
-                                                .ghost()
-                                                .label("Remove")
-                                                .on_click(cx.listener(move |this, _, _, cx| {
-                                                    this.remove_nameserver(i, cx);
-                                                })),
+                                            Button::new(SharedString::from(format!(
+                                                "remove-ns-{}",
+                                                i
+                                            )))
+                                            .ghost()
+                                            .label("Remove")
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.remove_nameserver(i, cx);
+                                            })),
                                         )
                                 },
                             )),
@@ -221,7 +223,7 @@ impl Render for DnsPage {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(Input::new(&self.new_fallback, window, cx))
+                            .child(Input::new(&self.new_fallback))
                             .child(
                                 Button::new("add-fallback")
                                     .label("Add")
@@ -231,23 +233,29 @@ impl Render for DnsPage {
                             ),
                     )
                     .child(
-                        v_flex()
-                            .gap_1()
-                            .children(self.config.fallback.iter().enumerate().map(
-                                |(i, server)| {
+                        v_flex().gap_1().children(
+                            self.config
+                                .fallback
+                                .iter()
+                                .flatten()
+                                .enumerate()
+                                .map(|(i, server)| {
                                     h_flex()
                                         .gap_2()
                                         .child(div().flex_1().child(server.clone()))
                                         .child(
-                                            Button::new(format!("remove-fb-{}", i))
-                                                .ghost()
-                                                .label("Remove")
-                                                .on_click(cx.listener(move |this, _, _, cx| {
-                                                    this.remove_fallback(i, cx);
-                                                })),
+                                            Button::new(SharedString::from(format!(
+                                                "remove-fb-{}",
+                                                i
+                                            )))
+                                            .ghost()
+                                            .label("Remove")
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.remove_fallback(i, cx);
+                                            })),
                                         )
-                                },
-                            )),
+                                }),
+                        ),
                     ),
             )
             .child(

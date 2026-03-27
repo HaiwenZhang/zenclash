@@ -1,16 +1,17 @@
 use gpui::{
-    div, App, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
+    div, prelude::FluentBuilder, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
-    button::Button,
+    button::{Button, ButtonVariants},
+    h_flex,
     input::{Input, InputState},
-    v_flex, h_flex,
-    Icon, IconName,
-    ActiveTheme,
+    v_flex, ActiveTheme, Icon, IconName,
 };
 
-use zenclash_core::{ProfileItem, ProfileType, HttpClient};
+use zenclash_core::config::ProfileExtra;
+use zenclash_core::prelude::{HttpClient, ProfileItem, ProfileType};
 
 pub struct ProfilesPage {
     profiles: Vec<ProfileItem>,
@@ -24,18 +25,11 @@ pub struct ProfilesPage {
 
 impl ProfilesPage {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let new_profile_url = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Subscription URL...")
-        });
-        let new_profile_name = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Profile name...")
-        });
-        
         Self {
             profiles: Vec::new(),
             selected_profile: None,
-            new_profile_url,
-            new_profile_name,
+            new_profile_url: cx.new(|cx| InputState::new(window, cx)),
+            new_profile_name: cx.new(|cx| InputState::new(window, cx)),
             is_updating: false,
             update_status: None,
             focus_handle: cx.focus_handle(),
@@ -45,7 +39,7 @@ impl ProfilesPage {
     pub fn add_profile(&mut self, cx: &mut Context<Self>) {
         let url = self.new_profile_url.read(cx).text().to_string();
         let name = self.new_profile_name.read(cx).text().to_string();
-        
+
         if url.is_empty() || name.is_empty() {
             self.update_status = Some("Please enter both URL and name".to_string());
             cx.notify();
@@ -56,20 +50,21 @@ impl ProfilesPage {
             id: uuid::Uuid::new_v4().to_string(),
             name,
             url: Some(url),
-            type_: ProfileType::Remote,
-            used: false,
-            extra: None,
+            profile_type: ProfileType::Remote,
+            path: None,
+            interval: None,
+            last_update: None,
+            sub_info: None,
+            auto_update: false,
+            updated: None,
+            extra: ProfileExtra::default(),
         };
 
         self.profiles.push(profile);
-        
-        self.new_profile_url.update(cx, |state, _| {
-            state.set_text("");
-        });
-        self.new_profile_name.update(cx, |state, _| {
-            state.set_text("");
-        });
-        
+
+        self.new_profile_url.update(cx, |state, _| {});
+        self.new_profile_name.update(cx, |state, _| {});
+
         self.update_status = Some("Profile added".to_string());
         cx.notify();
     }
@@ -80,10 +75,7 @@ impl ProfilesPage {
     }
 
     pub fn select_profile(&mut self, id: String, cx: &mut Context<Self>) {
-        for profile in &mut self.profiles {
-            profile.used = profile.id == id;
-        }
-        self.selected_profile = Some(id.clone());
+        self.selected_profile = Some(id);
         cx.notify();
     }
 }
@@ -98,7 +90,7 @@ impl Render for ProfilesPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let url_input = self.new_profile_url.clone();
         let name_input = self.new_profile_name.clone();
-        
+
         v_flex()
             .size_full()
             .gap_4()
@@ -106,7 +98,7 @@ impl Render for ProfilesPage {
                 div()
                     .text_2xl()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child("Profiles")
+                    .child("Profiles"),
             )
             .child(
                 v_flex()
@@ -118,46 +110,40 @@ impl Render for ProfilesPage {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(Input::new(&name_input, window, cx))
-                            .child(Input::new(&url_input, window, cx))
-                            .child(
-                                Button::new("add-profile")
-                                    .primary()
-                                    .label("Add")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.add_profile(cx);
-                                    }))
-                            )
-                    )
+                            .child(Input::new(&name_input))
+                            .child(Input::new(&url_input))
+                            .child(Button::new("add-profile").primary().label("Add").on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.add_profile(cx);
+                                }),
+                            )),
+                    ),
             )
             .child(
                 div()
                     .text_lg()
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .child(format!("Subscriptions ({})", self.profiles.len()))
+                    .child(format!("Subscriptions ({})", self.profiles.len())),
             )
             .child(
                 v_flex()
                     .gap_1()
-                    .children(self.profiles.iter().map(|profile| {
+                    .children(self.profiles.iter().enumerate().map(|(i, profile)| {
                         let is_selected = self.selected_profile.as_ref() == Some(&profile.id);
                         let id = profile.id.clone();
-                        
+
                         h_flex()
+                            .id(SharedString::from(format!("profile-{}", i)))
                             .gap_2()
                             .p_3()
                             .cursor_pointer()
-                            .when(is_selected, |this| {
-                                this.bg(cx.theme().primary.opacity(0.1))
-                            })
+                            .when(is_selected, |this| this.bg(cx.theme().primary.opacity(0.1)))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.select_profile(id.clone(), cx);
                             }))
                             .child(div().flex_1().child(profile.name.clone()))
-                            .when(profile.used, |this| {
-                                this.child(div().child("Active"))
-                            })
-                    }))
+                            .when(is_selected, |this| this.child(div().child("Active")))
+                    })),
             )
     }
 }

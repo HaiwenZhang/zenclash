@@ -1,6 +1,9 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement, Styled, Window,
+};
 use gpui_component::{
-    button::Button, card::Card, chip::Chip, h_flex, progress::Progress, v_flex, ActiveTheme, Icon,
+    button::Button, h_flex, progress::Progress, tag::Tag, v_flex, ActiveTheme, Disableable, Icon,
     IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
@@ -101,12 +104,12 @@ impl ProfileItem {
     }
 
     fn format_traffic(bytes: u64) -> String {
-        zenclash_core::format_traffic(bytes)
+        zenclash_core::prelude::format_traffic(bytes)
     }
 
     fn usage_percent(&self) -> f32 {
         if let Some(ref extra) = self.info.extra {
-            zenclash_core::calc_percent(extra.upload + extra.download, extra.total)
+            zenclash_core::prelude::calc_percent(extra.upload + extra.download, extra.total)
         } else {
             0.0
         }
@@ -114,7 +117,7 @@ impl ProfileItem {
 }
 
 impl RenderOnce for ProfileItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let has_extra = self.info.extra.is_some();
         let is_remote = self.info.profile_type == ProfileType::Remote;
@@ -128,7 +131,8 @@ impl RenderOnce for ProfileItem {
             theme.foreground
         };
 
-        Card::new()
+        div()
+            .id("profile-item")
             .p_3()
             .gap_1()
             .when(self.is_current, |this| this.bg(theme.primary))
@@ -154,11 +158,8 @@ impl RenderOnce for ProfileItem {
                                 let updating = self.is_updating;
                                 this.child(
                                     Button::new("update")
-                                        .xsmall()
-                                        .icon(
-                                            Icon::new(IconName::Refresh)
-                                                .when(updating, |this| this.animate()),
-                                        )
+                                        .with_size(gpui_component::Size::XSmall)
+                                        .icon(Icon::new(IconName::LoaderCircle))
                                         .when(updating, |this| this.disabled(true))
                                         .text_color(fg_color)
                                         .on_click(move |_, _, _| {
@@ -170,8 +171,8 @@ impl RenderOnce for ProfileItem {
                             })
                             .child(
                                 Button::new("menu")
-                                    .xsmall()
-                                    .icon(Icon::new(IconName::MoreVertical))
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .icon(Icon::new(IconName::EllipsisVertical))
                                     .text_color(fg_color),
                             ),
                     ),
@@ -208,9 +209,9 @@ impl RenderOnce for ProfileItem {
                         .justify_between()
                         .items_center()
                         .child(
-                            Chip::new()
-                                .xsmall()
-                                .outlined()
+                            Tag::new()
+                                .with_size(gpui_component::Size::XSmall)
+                                .outline()
                                 .text_color(if self.is_current {
                                     theme.primary_foreground
                                 } else {
@@ -218,19 +219,16 @@ impl RenderOnce for ProfileItem {
                                 })
                                 .child("Remote"),
                         )
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(fg_color)
-                                .child(zenclash_core::format_relative_time(self.info.updated)),
-                        ),
+                        .child(div().text_xs().text_color(fg_color).child(
+                            zenclash_core::prelude::format_relative_time(self.info.updated),
+                        )),
                 )
             })
             .when(self.info.profile_type == ProfileType::Local, |this| {
                 this.child(
-                    Chip::new()
-                        .xsmall()
-                        .outlined()
+                    Tag::new()
+                        .with_size(gpui_component::Size::XSmall)
+                        .outline()
                         .text_color(if self.is_current {
                             theme.primary_foreground
                         } else {
@@ -243,7 +241,7 @@ impl RenderOnce for ProfileItem {
                 this.child(
                     Progress::new()
                         .value(self.usage_percent())
-                        .when(self.is_current, |this| this.color(theme.primary_foreground)),
+                        .when(self.is_current, |this| this.bg(theme.primary_foreground)),
                 )
             })
             .on_click(move |_, _, _| {

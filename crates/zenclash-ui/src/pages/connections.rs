@@ -1,14 +1,13 @@
 use gpui::{
-    div, App, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
+    div, prelude::FluentBuilder, App, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
-    button::Button,
-    v_flex, h_flex,
-    ActiveTheme,
+    button::{Button, ButtonVariants},
+    h_flex, v_flex, ActiveTheme,
 };
 
-use zenclash_core::ConnectionItem;
+use zenclash_core::prelude::ConnectionItem;
 
 pub struct ConnectionsPage {
     connections: Vec<ConnectionItem>,
@@ -17,7 +16,7 @@ pub struct ConnectionsPage {
 }
 
 impl ConnectionsPage {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             connections: Vec::new(),
             selected_connection: None,
@@ -59,39 +58,48 @@ impl Render for ConnectionsPage {
                         div()
                             .text_2xl()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Connections")
+                            .child("Connections"),
                     )
                     .child(
                         Button::new("close-all")
                             .label("Close All")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.close_all(cx);
-                            }))
-                    )
+                            })),
+                    ),
             )
             .child(
                 div()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!("{} active connections", self.connections.len()))
+                    .child(format!("{} active connections", self.connections.len())),
             )
             .child(
                 v_flex()
                     .gap_1()
                     .children(self.connections.iter().map(|conn| {
                         let id = conn.id.clone();
+                        let source =
+                            format!("{}:{}", conn.metadata.source_ip, conn.metadata.source_port);
+                        let dest = conn.metadata.host.clone().unwrap_or_else(|| {
+                            format!(
+                                "{}:{}",
+                                conn.metadata.destination_ip.as_deref().unwrap_or("?"),
+                                conn.metadata.destination_port
+                            )
+                        });
                         h_flex()
                             .gap_2()
                             .p_2()
-                            .child(div().flex_1().child(format!("{} -> {}", conn.source, conn.destination)))
+                            .child(div().flex_1().child(format!("{} -> {}", source, dest)))
                             .child(
-                                Button::new(format!("close-{}", conn.id))
+                                Button::new(SharedString::from(format!("close-{}", conn.id)))
                                     .ghost()
                                     .label("Close")
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.close_connection(id.clone(), cx);
-                                    }))
+                                    })),
                             )
-                    }))
+                    })),
             )
     }
 }

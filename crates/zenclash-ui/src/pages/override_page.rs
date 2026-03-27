@@ -1,14 +1,19 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, IntoElement, Model, ParentElement,
-    Render, Styled, Window,
+    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
-    button::Button, card::Card, h_flex, input::TextInput, switch::Switch, v_flex, ActiveTheme,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    switch::Switch,
+    v_flex, ActiveTheme, Sizable,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::Page;
+use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum OverrideType {
@@ -53,14 +58,14 @@ impl OverrideItem {
 }
 
 pub struct OverridePage {
-    items: Model<Vec<OverrideItem>>,
+    items: Entity<Vec<OverrideItem>>,
     new_url: String,
 }
 
 impl OverridePage {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            items: cx.new_model(|_| Vec::new()),
+            items: cx.new(|_| Vec::new()),
             new_url: String::new(),
         }
     }
@@ -68,7 +73,7 @@ impl OverridePage {
     fn render_item(&self, item: &OverrideItem, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
-        Card::new()
+        div()
             .p_3()
             .gap_2()
             .child(
@@ -79,12 +84,16 @@ impl OverridePage {
                         h_flex()
                             .gap_2()
                             .items_center()
-                            .child(Switch::new(&item.id).xsmall().checked(item.enabled))
+                            .child(
+                                Switch::new(SharedString::from(item.id.clone()))
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .checked(item.enabled),
+                            )
                             .child(
                                 div()
                                     .text_sm()
                                     .font_weight(gpui::FontWeight::MEDIUM)
-                                    .child(&item.name),
+                                    .child(div().child(item.name.clone())),
                             )
                             .child(
                                 div()
@@ -108,13 +117,13 @@ impl OverridePage {
                         h_flex()
                             .gap_1()
                             .child(
-                                Button::new(format!("edit-{}", item.id))
-                                    .xsmall()
+                                Button::new(SharedString::from(format!("edit-{}", item.id)))
+                                    .with_size(gpui_component::Size::XSmall)
                                     .child("Edit"),
                             )
                             .child(
-                                Button::new(format!("delete-{}", item.id))
-                                    .xsmall()
+                                Button::new(SharedString::from(format!("delete-{}", item.id)))
+                                    .with_size(gpui_component::Size::XSmall)
                                     .child("Delete"),
                             ),
                     ),
@@ -124,30 +133,30 @@ impl OverridePage {
                     div()
                         .text_xs()
                         .text_color(theme.muted_foreground)
-                        .child(item.url.as_ref().unwrap()),
+                        .child(item.url.as_ref().unwrap().clone()),
                 )
             })
     }
 }
 
-impl Page for OverridePage {
+impl PageTrait for OverridePage {
     fn title() -> &'static str {
         "Override"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::FileCode
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::File
     }
 }
 
 impl Render for OverridePage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let items = self.items.read(cx);
+        let theme = cx.theme().clone();
+        let items = self.items.read(cx).clone();
 
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(
@@ -163,19 +172,27 @@ impl Render for OverridePage {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(Button::new("new-js").xsmall().child("New JS"))
-                            .child(Button::new("new-yaml").xsmall().child("New YAML"))
-                            .child(Button::new("import").xsmall().child("Import")),
+                            .child(
+                                Button::new("new-js")
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .child("New JS"),
+                            )
+                            .child(
+                                Button::new("new-yaml")
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .child("New YAML"),
+                            )
+                            .child(
+                                Button::new("import")
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .child("Import"),
+                            ),
                     ),
             )
             .child(
                 h_flex()
                     .gap_2()
-                    .child(
-                        div().flex_1().child(
-                            TextInput::new(&self.new_url).placeholder("Enter override URL..."),
-                        ),
-                    )
+                    .child(div().flex_1().child(self.new_url.clone()))
                     .child(Button::new("import-url").child("Import URL").primary()),
             )
             .when(items.is_empty(), |this| {

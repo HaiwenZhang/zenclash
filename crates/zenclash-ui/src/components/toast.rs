@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, IntoElement, Model,
-    ParentElement, Render, Styled, Window,
+    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{button::Button, h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable};
 use parking_lot::RwLock;
@@ -18,7 +18,7 @@ pub enum ToastType {
 
 #[derive(Debug, Clone)]
 pub struct ToastMessage {
-    pub id: usize,
+    pub id: String,
     pub message: String,
     pub toast_type: ToastType,
     pub created_at: Instant,
@@ -28,7 +28,7 @@ pub struct ToastMessage {
 impl ToastMessage {
     pub fn new(message: impl Into<String>, toast_type: ToastType) -> Self {
         Self {
-            id: rand::random(),
+            id: uuid::Uuid::new_v4().to_string(),
             message: message.into(),
             toast_type,
             created_at: Instant::now(),
@@ -64,26 +64,20 @@ impl ToastMessage {
 
 pub struct ToastManager {
     toasts: Vec<ToastMessage>,
-    next_id: usize,
 }
 
 impl ToastManager {
     pub fn new() -> Self {
-        Self {
-            toasts: Vec::new(),
-            next_id: 0,
-        }
+        Self { toasts: Vec::new() }
     }
 
-    pub fn push(&mut self, mut toast: ToastMessage) -> usize {
-        let id = self.next_id;
-        toast.id = id;
-        self.next_id += 1;
+    pub fn push(&mut self, toast: ToastMessage) -> String {
+        let id = toast.id.clone();
         self.toasts.push(toast);
         id
     }
 
-    pub fn remove(&mut self, id: usize) {
+    pub fn remove(&mut self, id: &str) {
         self.toasts.retain(|t| t.id != id);
     }
 
@@ -107,7 +101,7 @@ impl Default for ToastManager {
 }
 
 pub struct ToastContainer {
-    manager: Model<ToastManager>,
+    manager: Entity<ToastManager>,
 }
 
 impl ToastContainer {
@@ -139,13 +133,13 @@ impl ToastContainer {
         self.show(ToastMessage::info(message), cx);
     }
 
-    pub fn dismiss(&self, id: usize, cx: &mut App) {
+    pub fn dismiss(&self, id: &str, cx: &mut App) {
         self.manager.update(cx, |m, _| {
             m.remove(id);
         });
     }
 
-    pub fn manager(&self) -> Model<ToastManager> {
+    pub fn manager(&self) -> Entity<ToastManager> {
         self.manager.clone()
     }
 }
@@ -156,21 +150,20 @@ impl Render for ToastContainer {
         let toasts = self.manager.read(cx).toasts().to_vec();
 
         v_flex()
-            .fixed()
+            .relative()
             .top_0()
             .right_0()
             .w(px(320.))
             .gap_2()
             .p_4()
-            .z_index(1000)
             .children(toasts.into_iter().map(|toast| {
                 let id = toast.id;
                 let (icon, bg_color, fg_color) = match toast.toast_type {
                     ToastType::Success => (IconName::Check, theme.success, theme.background),
-                    ToastType::Error => (IconName::X, theme.destructive, theme.background),
+                    ToastType::Error => (IconName::Close, theme.danger, theme.background),
                     ToastType::Warning => {
-                        (IconName::AlertTriangle, theme.warning, theme.background)
-                    },
+                        (IconName::TriangleAlert, theme.warning, theme.background)
+                    }
                     ToastType::Info => (IconName::Info, theme.primary, theme.background),
                 };
 
@@ -185,13 +178,12 @@ impl Render for ToastContainer {
                     .child(Icon::new(icon).size_4())
                     .child(div().flex_1().text_sm().child(toast.message))
                     .child(
-                        Button::new(format!("dismiss-{}", id))
-                            .xsmall()
-                            .icon(Icon::new(IconName::X))
-                            .text_color(fg_color)
-                            .on_click(move |_, cx, _| {
+                        Button::new(SharedString::from(format!("dismiss-{}", id)))
+                            .with_size(gpui_component::Size::XSmall)
+                            .icon(Icon::new(IconName::Close))
+                            .on_click(move |_, _, cx| {
                                 manager.update(cx, |m, _| {
-                                    m.remove(id);
+                                    m.remove(&id);
                                 });
                             }),
                     )

@@ -1,4 +1,4 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
+use gpui::{InteractiveElement, ParentElement, div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
 use gpui_component::{h_flex, v_flex, ActiveTheme, Sizable};
 use serde::{Deserialize, Serialize};
 
@@ -150,15 +150,15 @@ impl ConnectionTable {
     fn render_row(&self, conn: &ConnectionInfo, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
 
-        let upload = zenclash_core::format_traffic(conn.upload);
-        let download = zenclash_core::format_traffic(conn.download);
+        let upload = zenclash_core::prelude::format_traffic(conn.upload);
+        let download = zenclash_core::prelude::format_traffic(conn.download);
         let upload_speed = conn
             .upload_speed
-            .map(zenclash_core::format_speed)
+            .map(zenclash_core::prelude::format_speed)
             .unwrap_or_default();
         let download_speed = conn
             .download_speed
-            .map(zenclash_core::format_speed)
+            .map(zenclash_core::prelude::format_speed)
             .unwrap_or_default();
 
         let time = chrono::DateTime::from_timestamp(conn.start, 0)
@@ -227,7 +227,7 @@ impl RenderOnce for ConnectionTable {
             .overflow_hidden()
             .child(self.render_header(cx))
             .child(
-                v_flex().flex_1().overflow_y_scroll().children(
+                v_flex().flex_1().overflow_y_hidden().children(
                     self.connections
                         .iter()
                         .map(|conn| self.render_row(conn, cx)),

@@ -1,10 +1,10 @@
-use gpui::{
+use gpui::{prelude::FluentBuilder, InteractiveElement, 
     div, App, Context, Entity, FocusHandle, Focusable, IntoElement,
     ParentElement, Render, ScrollHandle, Styled, Window,
 };
 use gpui_component::{
     button::Button,
-    scrollable::Scrollable,
+    scroll::Scrollable,
     v_flex, h_flex,
     ActiveTheme,
 };
@@ -18,7 +18,7 @@ pub struct LogsPage {
 }
 
 impl LogsPage {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             logs: Vec::new(),
             max_logs: 1000,
@@ -95,7 +95,7 @@ impl Render for LogsPage {
                                 div()
                                     .p_1()
                                     .text_sm()
-                                    .font_family(gpui::FamilyName::Monospace)
+                                    .font_family("monospace")
                                     .child(log.clone())
                             }))
                     )

@@ -1,14 +1,21 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
+    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
-    button::Button, card::Card, chip::Chip, h_flex, input::TextInput, switch::Switch, tab::Tab,
-    tab_list::TabList, v_flex, ActiveTheme, Icon, IconName, Sizable,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    switch::Switch,
+    tab::Tab,
+    tab::TabBar,
+    tag::Tag,
+    v_flex, ActiveTheme, Icon, IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
 use super::Page;
+use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SubStoreTab {
@@ -43,7 +50,7 @@ pub struct SubStorePage {
 }
 
 impl SubStorePage {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             current_tab: SubStoreTab::default(),
             subscriptions: Vec::new(),
@@ -61,7 +68,7 @@ impl SubStorePage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -98,7 +105,7 @@ impl SubStorePage {
                             )
                             .child(
                                 Button::new("toggle-server")
-                                    .xsmall()
+                                    .with_size(gpui_component::Size::XSmall)
                                     .when(self.server_running, |this| this.child("Stop"))
                                     .when(!self.server_running, |this| {
                                         this.child("Start").primary()
@@ -170,7 +177,11 @@ impl SubStorePage {
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .child(format!("Subscriptions ({})", self.subscriptions.len())),
                     )
-                    .child(Button::new("add-sub").xsmall().child("Add Subscription")),
+                    .child(
+                        Button::new("add-sub")
+                            .with_size(gpui_component::Size::XSmall)
+                            .child("Add Subscription"),
+                    ),
             )
             .when(self.subscriptions.is_empty(), |this| {
                 this.child(
@@ -182,7 +193,7 @@ impl SubStorePage {
                 )
             })
             .children(self.subscriptions.iter().map(|sub| {
-                Card::new()
+                div()
                     .p_3()
                     .gap_2()
                     .child(
@@ -199,13 +210,13 @@ impl SubStorePage {
                                     .gap_1()
                                     .child(
                                         Button::new("edit")
-                                            .xsmall()
-                                            .icon(Icon::new(IconName::Pencil)),
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .icon(Icon::new(IconName::Settings)),
                                     )
                                     .child(
                                         Button::new("delete")
-                                            .xsmall()
-                                            .icon(Icon::new(IconName::Trash))
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .icon(Icon::new(IconName::Delete))
                                             .danger(),
                                     ),
                             ),
@@ -215,7 +226,12 @@ impl SubStorePage {
                             .gap_2()
                             .text_xs()
                             .text_color(theme.muted_foreground)
-                            .child(Chip::new().xsmall().outlined().child(sub.sub_type.clone()))
+                            .child(
+                                Tag::new()
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .outline()
+                                    .child(sub.sub_type.clone()),
+                            )
                             .when_some(sub.updated, |this, ts| {
                                 let dt = chrono::DateTime::from_timestamp(ts, 0);
                                 this.child(
@@ -243,7 +259,11 @@ impl SubStorePage {
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .child(format!("Collections ({})", self.collections.len())),
                     )
-                    .child(Button::new("add-col").xsmall().child("Add Collection")),
+                    .child(
+                        Button::new("add-col")
+                            .with_size(gpui_component::Size::XSmall)
+                            .child("Add Collection"),
+                    ),
             )
             .when(self.collections.is_empty(), |this| {
                 this.child(
@@ -255,7 +275,7 @@ impl SubStorePage {
                 )
             })
             .children(self.collections.iter().map(|col| {
-                Card::new()
+                div()
                     .p_3()
                     .gap_2()
                     .child(
@@ -272,13 +292,13 @@ impl SubStorePage {
                                     .gap_1()
                                     .child(
                                         Button::new("edit")
-                                            .xsmall()
-                                            .icon(Icon::new(IconName::Pencil)),
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .icon(Icon::new(IconName::Settings)),
                                     )
                                     .child(
                                         Button::new("delete")
-                                            .xsmall()
-                                            .icon(Icon::new(IconName::Trash))
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .icon(Icon::new(IconName::Delete))
                                             .danger(),
                                     ),
                             ),
@@ -293,13 +313,13 @@ impl SubStorePage {
     }
 }
 
-impl Page for SubStorePage {
+impl PageTrait for SubStorePage {
     fn title() -> &'static str {
         "SubStore"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::Package
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::Folder
     }
 }
 
@@ -313,7 +333,7 @@ impl Render for SubStorePage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(

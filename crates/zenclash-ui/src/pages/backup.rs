@@ -1,11 +1,12 @@
+use std::io::Write;
 use std::path::PathBuf;
 
-use gpui::{
+use gpui::{prelude::FluentBuilder, InteractiveElement, AppContext,
     div, App, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, Styled,
     Window,
 };
 use gpui_component::{
-    button::Button,
+    button::{Button, ButtonVariants},
     h_flex,
     input::{Input, InputState},
     switch::Switch,
@@ -26,20 +27,12 @@ pub struct BackupPage {
 
 impl BackupPage {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let webdav_url =
-            cx.new(|cx| InputState::new(window, cx).placeholder("https://webdav.example.com"));
-        let webdav_username = cx.new(|cx| InputState::new(window, cx).placeholder("username"));
-        let webdav_password =
-            cx.new(|cx| InputState::new(window, cx).placeholder("password").secret());
-        let webdav_dir = cx.new(|cx| InputState::new(window, cx).placeholder("zenclash"));
-        let webdav_max_backups = cx.new(|cx| InputState::new(window, cx).placeholder("10"));
-
         Self {
-            webdav_url,
-            webdav_username,
-            webdav_password,
-            webdav_dir,
-            webdav_max_backups,
+            webdav_url: cx.new(|cx| InputState::new(window, cx)),
+            webdav_username: cx.new(|cx| InputState::new(window, cx)),
+            webdav_password: cx.new(|cx| InputState::new(window, cx)),
+            webdav_dir: cx.new(|cx| InputState::new(window, cx)),
+            webdav_max_backups: cx.new(|cx| InputState::new(window, cx)),
             auto_backup: false,
             backup_interval: 24,
             focus_handle: cx.focus_handle(),
@@ -56,16 +49,16 @@ impl BackupPage {
         self.status = Some("Backing up...".to_string());
         cx.notify();
 
-        cx.spawn(async move |this, mut cx| match backup_to_local().await {
+        cx.spawn(async move |this, cx| match backup_to_local().await {
             Ok(_) => {
-                this.update(&mut cx, |this, cx| {
+                this.update(cx, |this, cx| {
                     this.status = Some("Backup completed successfully".to_string());
                     cx.notify();
                 })
                 .ok();
             },
             Err(e) => {
-                this.update(&mut cx, |this, cx| {
+                this.update(cx, |this, cx| {
                     this.status = Some(format!("Backup failed: {}", e));
                     cx.notify();
                 })
@@ -84,7 +77,7 @@ impl BackupPage {
         div()
             .text_lg()
             .font_weight(gpui::FontWeight::MEDIUM)
-            .child(title)
+            .child(title.to_string())
     }
 }
 
@@ -146,38 +139,38 @@ impl Render for BackupPage {
                         h_flex()
                             .gap_4()
                             .child(div().w_32().child("URL"))
-                            .child(Input::new(&self.webdav_url, window, cx).flex_1()),
+                            .child(Input::new(&self.webdav_url).flex_1()),
                     )
                     .child(
                         h_flex()
                             .gap_4()
                             .child(div().w_32().child("Username"))
-                            .child(Input::new(&self.webdav_username, window, cx).flex_1()),
+                            .child(Input::new(&self.webdav_username).flex_1()),
                     )
                     .child(
                         h_flex()
                             .gap_4()
                             .child(div().w_32().child("Password"))
-                            .child(Input::new(&self.webdav_password, window, cx).flex_1()),
+                            .child(Input::new(&self.webdav_password).flex_1()),
                     )
                     .child(
                         h_flex()
                             .gap_4()
                             .child(div().w_32().child("Directory"))
-                            .child(Input::new(&self.webdav_dir, window, cx).flex_1()),
+                            .child(Input::new(&self.webdav_dir).flex_1()),
                     )
                     .child(
                         h_flex()
                             .gap_4()
                             .child(div().w_32().child("Max Backups"))
-                            .child(Input::new(&self.webdav_max_backups, window, cx).flex_1()),
+                            .child(Input::new(&self.webdav_max_backups).flex_1()),
                     )
                     .child(
                         h_flex()
                             .gap_4()
                             .child(div().w_32().child("Auto Backup"))
                             .child(
-                                Switch::new("auto-backup", self.auto_backup.into()).on_click(
+                                Switch::new("auto-backup").checked(self.auto_backup).on_click(
                                     cx.listener(|this, _, _, cx| {
                                         this.toggle_auto_backup(cx);
                                     }),

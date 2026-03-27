@@ -12,9 +12,9 @@ mod tests;
 
 pub use api::{
     ApiClient, ApiClientConfig, ApiError, ConfigPatch, ConnectionItem, ConnectionMetadata,
-    ConnectionsResponse, ConnectionsStream, DelayHistory, DelayTestResult, LogItem, LogLevel,
-    LogStream, MemoryData, ProviderItem, ProvidersResponse, ProxiesResponse, ProxyHistory,
-    ProxyItem, RuleItem, RulesResponse, RuntimeConfig, TrafficData, TrafficStream, Version,
+    ConnectionsResponse, ConnectionsStream, DelayHistory, DelayTestResult, LogItem, LogStream,
+    ProviderItem, ProvidersResponse, ProxiesResponse, ProxyItem, RuleItem, RulesResponse,
+    RuntimeConfig, TrafficData, TrafficStream, Version,
 };
 pub use dns::{DnsError, DnsManager};
 pub use factory::{ConfigFactory, FactoryError, RuntimeConfigPatch, TunPatch};

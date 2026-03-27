@@ -1,14 +1,21 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Window,
+    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
-    button::Button, card::Card, h_flex, input::Input, select::Select, switch::Switch, tab::Tab,
-    tab_list::TabList, v_flex, ActiveTheme,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    select::Select,
+    switch::Switch,
+    tab::Tab,
+    tab::TabBar,
+    v_flex, ActiveTheme, Disableable, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
 use super::Page;
+use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SettingsTab {
@@ -69,7 +76,7 @@ pub struct SettingsPage {
 }
 
 impl SettingsPage {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             current_tab: SettingsTab::default(),
             general: GeneralSettings {
@@ -108,7 +115,7 @@ impl SettingsPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -158,7 +165,7 @@ impl SettingsPage {
                     .child(div().text_sm().child("Auto Launch"))
                     .child(
                         Switch::new("auto-launch")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(self.general.auto_launch),
                     ),
             )
@@ -170,7 +177,7 @@ impl SettingsPage {
                     .child(div().text_sm().child("Auto Check Update"))
                     .child(
                         Switch::new("auto-check-update")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(self.general.auto_check_update),
                     ),
             )
@@ -182,7 +189,7 @@ impl SettingsPage {
                     .child(div().text_sm().child("Silent Start"))
                     .child(
                         Switch::new("silent-start")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(self.general.silent_start),
                     ),
             )
@@ -194,7 +201,7 @@ impl SettingsPage {
                     .child(div().text_sm().child("Show Tray Icon"))
                     .child(
                         Switch::new("show-tray")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(self.general.show_tray),
                     ),
             )
@@ -206,7 +213,7 @@ impl SettingsPage {
                     .child(div().text_sm().child("Show Floating Window"))
                     .child(
                         Switch::new("show-floating")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(self.general.show_floating_window),
                     ),
             )
@@ -252,7 +259,7 @@ impl SettingsPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -309,7 +316,7 @@ impl SettingsPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -366,7 +373,7 @@ impl SettingsPage {
                                 .child(div().text_xs().child("Auto Backup"))
                                 .child(
                                     Switch::new("webdav-auto")
-                                        .xsmall()
+                                        .with_size(gpui_component::Size::XSmall)
                                         .checked(self.webdav.auto_backup),
                                 ),
                         ),
@@ -376,10 +383,22 @@ impl SettingsPage {
                 h_flex()
                     .gap_2()
                     .justify_end()
-                    .child(Button::new("webdav-config").xsmall().child("Configure"))
+                    .child(
+                        Button::new("webdav-config")
+                            .with_size(gpui_component::Size::XSmall)
+                            .child("Configure"),
+                    )
                     .when(!self.webdav.url.is_empty(), |this| {
-                        this.child(Button::new("webdav-backup").xsmall().child("Backup Now"))
-                            .child(Button::new("webdav-restore").xsmall().child("Restore"))
+                        this.child(
+                            Button::new("webdav-backup")
+                                .with_size(gpui_component::Size::XSmall)
+                                .child("Backup Now"),
+                        )
+                        .child(
+                            Button::new("webdav-restore")
+                                .with_size(gpui_component::Size::XSmall)
+                                .child("Restore"),
+                        )
                     }),
             )
     }
@@ -399,7 +418,7 @@ impl SettingsPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -438,13 +457,13 @@ impl SettingsPage {
     }
 }
 
-impl Page for SettingsPage {
+impl PageTrait for SettingsPage {
     fn title() -> &'static str {
         "Settings"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::Settings
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::Settings
     }
 }
 
@@ -460,7 +479,7 @@ impl Render for SettingsPage {
 
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(
@@ -521,11 +540,13 @@ impl Render for SettingsPage {
                     ),
             )
             .child(match self.current_tab {
-                SettingsTab::General => self.render_general_section(cx),
-                SettingsTab::Mihomo => self.render_mihomo_section(cx),
-                SettingsTab::WebDav => self.render_webdav_section(cx),
-                SettingsTab::Shortcuts => self.render_shortcuts_section(cx),
-                SettingsTab::SubStore => div().child("SubStore settings coming soon"),
+                SettingsTab::General => self.render_general_section(cx).into_any_element(),
+                SettingsTab::Mihomo => self.render_mihomo_section(cx).into_any_element(),
+                SettingsTab::WebDav => self.render_webdav_section(cx).into_any_element(),
+                SettingsTab::Shortcuts => self.render_shortcuts_section(cx).into_any_element(),
+                SettingsTab::SubStore => div()
+                    .child("SubStore settings coming soon")
+                    .into_any_element(),
             })
     }
 }

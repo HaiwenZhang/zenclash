@@ -1,37 +1,107 @@
 use std::sync::Arc;
 
 use gpui::{
-    actions, div, px, App, Context, IntoElement, ParentElement, Render, SharedString, Styled,
-    Window, WindowBounds, WindowOptions,
+    actions, div, px, Action, App, Context, IntoElement, ParentElement, Render, SharedString,
+    Styled, Window, WindowBounds, WindowOptions,
 };
 use gpui_component::{
-    h_flex, v_flex, ActiveTheme, Button, Collapsible, Icon, IconName, Root, Theme, ThemeMode,
-    TitleBar,
+    button::Button, collapsible::Collapsible, h_flex, v_flex, ActiveTheme, Icon, IconName, Root,
+    Theme, ThemeMode, TitleBar,
 };
 use tokio::sync::RwLock;
 
-use zenclash_core::{
+use zenclash_core::prelude::{
     AppConfig, ConnectionItem, CoreManager, CoreState, ProfileItem, ProxyGroup, TrafficData,
 };
 
+use crate::app::{Quit, ToggleSidebar, ToggleSysProxy, ToggleTun};
 use crate::components::sidebar::ZenSidebar;
-use crate::pages::{ConnectionsPage, LogsPage, Page, ProfilesPage, ProxiesPage, SettingsPage};
+use crate::pages::{
+    connections::ConnectionsPage, logs::LogsPage, profiles::ProfilesPage, proxies::ProxiesPage,
+    settings::SettingsPage, Page,
+};
 
 actions!(
     zenclash,
     [
-        Quit,
-        ToggleSidebar,
         ShowWindow,
         HideWindow,
-        ToggleSysProxy,
-        ToggleTun,
         SetRuleMode,
         SetGlobalMode,
         SetDirectMode,
         UpdateTrayMenu,
     ]
 );
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelectProxy {
+    pub group: String,
+    pub proxy: String,
+}
+
+impl Action for SelectProxy {
+    fn boxed_clone(&self) -> Box<dyn Action> {
+        Box::new(self.clone())
+    }
+    fn partial_eq(&self, other: &dyn Action) -> bool {
+        if let Some(other) = (other as &dyn std::any::Any).downcast_ref::<Self>() {
+            self == other
+        } else {
+            false
+        }
+    }
+    fn name(&self) -> &'static str {
+        "SelectProxy"
+    }
+    fn name_for_type() -> &'static str
+    where
+        Self: Sized,
+    {
+        "SelectProxy"
+    }
+    fn build(_value: serde_json::Value) -> Result<Box<dyn Action>, anyhow::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Box::new(Self {
+            group: String::new(),
+            proxy: String::new(),
+        }))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelectProfile {
+    pub id: String,
+}
+
+impl Action for SelectProfile {
+    fn boxed_clone(&self) -> Box<dyn Action> {
+        Box::new(self.clone())
+    }
+    fn partial_eq(&self, other: &dyn Action) -> bool {
+        if let Some(other) = (other as &dyn std::any::Any).downcast_ref::<Self>() {
+            self == other
+        } else {
+            false
+        }
+    }
+    fn name(&self) -> &'static str {
+        "SelectProfile"
+    }
+    fn name_for_type() -> &'static str
+    where
+        Self: Sized,
+    {
+        "SelectProfile"
+    }
+    fn build(_value: serde_json::Value) -> Result<Box<dyn Action>, anyhow::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Box::new(Self { id: String::new() }))
+    }
+}
 
 pub struct TrayManager {
     core_manager: Arc<RwLock<CoreManager>>,
@@ -43,6 +113,7 @@ pub struct TrayManager {
     tun_enabled: bool,
     traffic_up: u64,
     traffic_down: u64,
+    core_state: CoreState,
 }
 
 impl TrayManager {
@@ -57,6 +128,7 @@ impl TrayManager {
             tun_enabled: false,
             traffic_up: 0,
             traffic_down: 0,
+            core_state: CoreState::Stopped,
         }
     }
 
@@ -73,6 +145,7 @@ impl TrayManager {
             TrayState::TunChanged(enabled) => self.tun_enabled = enabled,
             TrayState::ProxyGroupsUpdated(groups) => self.proxy_groups = groups,
             TrayState::ProfilesUpdated(profiles) => self.profiles = profiles,
+            TrayState::CoreStateChanged(core_state) => self.core_state = core_state,
         }
         cx.notify();
     }
@@ -108,15 +181,14 @@ impl TrayManager {
         menu.add_submenu(TraySubmenu::new("Mode", self.build_mode_menu()));
         menu.add_separator();
 
-        if let Some(core) = self.core_manager.try_read() {
-            let status = match core.state() {
-                CoreState::Running => "Running",
-                CoreState::Stopped => "Stopped",
-                CoreState::Starting => "Starting...",
-                CoreState::Error => "Error",
-            };
-            menu.add_item(TrayMenuItem::label(format!("Core: {}", status)).disabled(true));
-        }
+        let status = match self.core_state {
+            CoreState::Running => "Running",
+            CoreState::Stopped => "Stopped",
+            CoreState::Starting => "Starting...",
+            CoreState::Stopping => "Stopping...",
+            CoreState::Error => "Error",
+        };
+        menu.add_item(TrayMenuItem::label(format!("Core: {}", status)).disabled(true));
 
         let traffic_text = format!(
             "↑ {} ↓ {}",
@@ -135,20 +207,20 @@ impl TrayManager {
         self.proxy_groups
             .iter()
             .map(|group| {
-                let selected = group.selected.clone().unwrap_or_default();
+                let selected = group.current.clone().unwrap_or_default();
                 TrayMenuItem::submenu(
                     group.name.clone(),
                     group
                         .proxies
                         .iter()
                         .map(|proxy| {
-                            let is_selected = proxy.name == selected;
+                            let is_selected = *proxy == selected;
                             TrayMenuItem::checkbox(
-                                proxy.name.clone(),
+                                proxy.clone(),
                                 is_selected,
                                 SelectProxy {
                                     group: group.name.clone(),
-                                    proxy: proxy.name.clone(),
+                                    proxy: proxy.clone(),
                                 },
                             )
                         })
@@ -164,7 +236,7 @@ impl TrayManager {
             .map(|profile| {
                 TrayMenuItem::checkbox(
                     profile.name.clone(),
-                    profile.used,
+                    false,
                     SelectProfile {
                         id: profile.id.clone(),
                     },
@@ -202,6 +274,7 @@ pub enum TrayState {
     TunChanged(bool),
     ProxyGroupsUpdated(Vec<ProxyGroup>),
     ProfilesUpdated(Vec<ProfileItem>),
+    CoreStateChanged(CoreState),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -240,17 +313,17 @@ pub enum TrayMenuItem {
     },
     Action {
         text: String,
-        action: Box<dyn Fn()>,
+        action: Box<dyn Action>,
     },
     Checkbox {
         text: String,
         checked: bool,
-        action: Box<dyn Fn()>,
+        action: Box<dyn Action>,
     },
     Radio {
         text: String,
         selected: bool,
-        action: Box<dyn Fn()>,
+        action: Box<dyn Action>,
     },
     Submenu(TraySubmenu),
     Separator,
@@ -264,14 +337,25 @@ impl TrayMenuItem {
         }
     }
 
-    pub fn action(text: impl Into<String>, action: impl Fn() + 'static) -> Self {
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        if let Self::Label {
+            disabled: ref mut d,
+            ..
+        } = &mut self
+        {
+            *d = disabled;
+        }
+        self
+    }
+
+    pub fn action(text: impl Into<String>, action: impl Action + 'static) -> Self {
         Self::Action {
             text: text.into(),
             action: Box::new(action),
         }
     }
 
-    pub fn checkbox(text: impl Into<String>, checked: bool, action: impl Fn() + 'static) -> Self {
+    pub fn checkbox(text: impl Into<String>, checked: bool, action: impl Action + 'static) -> Self {
         Self::Checkbox {
             text: text.into(),
             checked,
@@ -279,7 +363,7 @@ impl TrayMenuItem {
         }
     }
 
-    pub fn radio(text: impl Into<String>, selected: bool, action: impl Fn() + 'static) -> Self {
+    pub fn radio(text: impl Into<String>, selected: bool, action: impl Action + 'static) -> Self {
         Self::Radio {
             text: text.into(),
             selected,

@@ -1,11 +1,12 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, ClickEvent, IntoElement, RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder, px, App, ClickEvent, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
     h_flex,
-    sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    sidebar::{Sidebar, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuItem},
     switch::Switch,
-    v_flex, ActiveTheme, Icon, IconName, Sizable,
+    v_flex, ActiveTheme, Icon, IconName, Side, Sizable,
 };
 use std::rc::Rc;
 
@@ -29,6 +30,7 @@ impl OutboundMode {
     }
 }
 
+#[derive(IntoElement)]
 pub struct ZenSidebar {
     current_page: Page,
     collapsed: bool,
@@ -125,7 +127,7 @@ impl RenderOnce for ZenSidebar {
             Page::Settings,
         ];
 
-        Sidebar::new("zen-sidebar")
+        Sidebar::<SidebarMenu>::new(Side::Left)
             .collapsed(self.collapsed)
             .w(px(if self.collapsed { 48. } else { 220. }))
             .gap_0()
@@ -141,13 +143,13 @@ impl RenderOnce for ZenSidebar {
                             .size_8()
                             .flex_shrink_0()
                             .when(!self.collapsed, |this| {
-                                this.child(Icon::new(IconName::Zap).size_4())
+                                this.child(Icon::new(IconName::Star).size_4())
                             })
                             .when(self.collapsed, |this| {
                                 this.size_4()
                                     .bg(theme.transparent)
                                     .text_color(theme.foreground)
-                                    .child(Icon::new(IconName::Zap).size_4())
+                                    .child(Icon::new(IconName::Star).size_4())
                             }),
                     )
                     .when(!self.collapsed, |this| {
@@ -169,146 +171,30 @@ impl RenderOnce for ZenSidebar {
                         )
                     }),
             )
-            .child(
-                v_flex()
-                    .gap_2()
-                    .p_2()
-                    .border_b_1()
-                    .border_color(theme.border)
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .justify_between()
-                            .px_2()
-                            .py_1()
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(
-                                        Icon::new(IconName::Globe)
-                                            .size_4()
-                                            .text_color(theme.muted_foreground),
-                                    )
-                                    .when(!self.collapsed, |this| this.child("System Proxy")),
-                            )
-                            .child(
-                                Switch::new("sysproxy")
-                                    .xsmall()
-                                    .checked(self.sysproxy_enabled)
-                                    .on_click(move |checked, _, _| {
-                                        if let Some(handler) = &on_toggle_sysproxy {
-                                            handler(*checked);
-                                        }
-                                    }),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .justify_between()
-                            .px_2()
-                            .py_1()
-                            .child(
-                                h_flex()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(
-                                        Icon::new(IconName::Route)
-                                            .size_4()
-                                            .text_color(theme.muted_foreground),
-                                    )
-                                    .when(!self.collapsed, |this| this.child("TUN Mode")),
-                            )
-                            .child(
-                                Switch::new("tun")
-                                    .xsmall()
-                                    .checked(self.tun_enabled)
-                                    .on_click(move |checked, _, _| {
-                                        if let Some(handler) = &on_toggle_tun {
-                                            handler(*checked);
-                                        }
-                                    }),
-                            ),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .p_2()
-                    .border_b_1()
-                    .border_color(theme.border)
-                    .when(!self.collapsed, |this| {
-                        this.child(
-                            div()
-                                .px_2()
-                                .text_xs()
-                                .text_color(theme.muted_foreground)
-                                .child("Outbound Mode"),
-                        )
-                    })
-                    .child(
-                        h_flex().gap_1().px_1().children(
-                            [
-                                OutboundMode::Rule,
-                                OutboundMode::Global,
-                                OutboundMode::Direct,
-                            ]
-                            .map(|mode| {
-                                let is_active = self.outbound_mode == mode;
-                                let on_change = on_change_mode.clone();
-                                div()
-                                    .flex_1()
-                                    .items_center()
-                                    .justify_center()
-                                    .py_1()
-                                    .rounded(theme.radius)
-                                    .when(is_active, |this| {
-                                        this.bg(theme.secondary)
-                                            .text_color(theme.secondary_foreground)
-                                    })
-                                    .when(!is_active, |this| {
-                                        this.text_color(theme.muted_foreground)
-                                            .hover(|this| this.bg(theme.muted))
-                                    })
-                                    .text_xs()
-                                    .child(mode.label())
-                                    .on_click(move |_: &ClickEvent, _, _| {
-                                        if let Some(handler) = &on_change {
-                                            handler(mode);
-                                        }
-                                    })
-                            }),
-                        ),
-                    ),
-            )
-            .child(
-                SidebarGroup::new("").child(SidebarMenu::new().children(pages.into_iter().map(
-                    |page| {
+            .footer(
+                SidebarFooter::new()
+                    .child(SidebarMenu::new().children(pages.into_iter().map(|page| {
                         let is_active = self.current_page == page;
                         let on_nav = on_navigate.clone();
                         SidebarMenuItem::new(page.label())
                             .icon(page.icon())
                             .active(is_active)
-                            .on_click(move |_window, _cx| {
+                            .on_click(move |_, _, _| {
                                 if let Some(handler) = &on_nav {
                                     handler(page);
                                 }
                             })
-                    },
-                ))),
-            )
-            .footer(
-                SidebarFooter::new().child(
-                    SidebarMenuItem::new("Settings")
-                        .icon(IconName::Settings)
-                        .active(self.current_page == Page::Settings)
-                        .on_click(move |_window, _cx| {
-                            if let Some(handler) = &on_navigate {
-                                handler(Page::Settings);
-                            }
-                        }),
-                ),
+                    })))
+                    .child(
+                        SidebarMenuItem::new("Settings")
+                            .icon(IconName::Settings)
+                            .active(self.current_page == Page::Settings)
+                            .on_click(move |_, _, _| {
+                                if let Some(handler) = &on_navigate {
+                                    handler(Page::Settings);
+                                }
+                            }),
+                    ),
             )
     }
 }

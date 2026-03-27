@@ -1,3 +1,4 @@
+use chrono::{Datelike, Timelike};
 use crate::config::ProfileItem;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ pub enum ProfileUpdaterError {
 }
 
 struct ScheduledUpdate {
+    #[allow(dead_code)]
     profile_id: String,
     interval_minutes: Option<u64>,
     cron_expression: Option<String>,

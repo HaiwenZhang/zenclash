@@ -1,7 +1,8 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
-use gpui_component::{
-    button::Button, card::Card, chip::Chip, h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable,
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
+use gpui_component::{button::Button, h_flex, tag::Tag, v_flex, ActiveTheme, Icon, Sizable};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,17 +70,17 @@ impl ConnectionItem {
     }
 
     fn format_traffic(bytes: u64) -> String {
-        zenclash_core::format_traffic(bytes)
+        zenclash_core::prelude::format_traffic(bytes)
     }
 
     fn format_speed(bytes: Option<u64>) -> String {
         bytes
-            .map(|b| zenclash_core::format_speed(b))
+            .map(|b| zenclash_core::prelude::format_speed(b))
             .unwrap_or_default()
     }
 
     fn format_time_ago(timestamp: i64) -> String {
-        zenclash_core::format_relative_time(timestamp)
+        zenclash_core::prelude::format_relative_time(timestamp)
     }
 
     fn destination(&self) -> String {
@@ -104,7 +105,7 @@ impl ConnectionItem {
 }
 
 impl RenderOnce for ConnectionItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let destination = self.destination();
         let process_name = self.process_name();
@@ -118,7 +119,8 @@ impl RenderOnce for ConnectionItem {
         let on_close = self.on_close.take();
         let on_detail = self.on_detail.take();
 
-        Card::new()
+        div()
+            .id("connection-item")
             .p_2()
             .gap_2()
             .cursor_pointer()
@@ -135,7 +137,7 @@ impl RenderOnce for ConnectionItem {
                                 .items_center()
                                 .justify_center()
                                 .child(
-                                    Icon::new(IconName::Globe)
+                                    Icon::new(gpui_component::IconName::Globe)
                                         .size_5()
                                         .text_color(theme.muted_foreground),
                                 ),
@@ -169,14 +171,14 @@ impl RenderOnce for ConnectionItem {
                                             )
                                             .child(
                                                 Button::new("close")
-                                                    .xsmall()
+                                                    .with_size(gpui_component::Size::XSmall)
                                                     .icon(Icon::new(if self.info.is_active {
-                                                        IconName::X
+                                                        gpui_component::IconName::Close
                                                     } else {
-                                                        IconName::Trash
+                                                        gpui_component::IconName::Delete
                                                     }))
                                                     .when(!self.info.is_active, |this| {
-                                                        this.text_color(theme.destructive)
+                                                        this.text_color(theme.danger)
                                                     })
                                                     .on_click(move |_, _, _| {
                                                         if let Some(handler) = &on_close {
@@ -191,12 +193,12 @@ impl RenderOnce for ConnectionItem {
                                     .gap_1()
                                     .flex_wrap()
                                     .child(
-                                        Chip::new()
-                                            .xsmall()
-                                            .dot(if self.info.is_active {
-                                                theme.primary
+                                        Tag::new()
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .with_variant(if self.info.is_active {
+                                                gpui_component::tag::TagVariant::Primary
                                             } else {
-                                                theme.destructive
+                                                gpui_component::tag::TagVariant::Danger
                                             })
                                             .child(format!(
                                                 "{}({})",
@@ -205,21 +207,30 @@ impl RenderOnce for ConnectionItem {
                                             )),
                                     )
                                     .when(!self.info.chains.is_empty(), |this| {
-                                        this.child(Chip::new().xsmall().outlined().child(
-                                            self.info.chains.first().unwrap_or(&"".into()).clone(),
-                                        ))
+                                        this.child(
+                                            Tag::new()
+                                                .with_size(gpui_component::Size::XSmall)
+                                                .outline()
+                                                .child(
+                                                    self.info
+                                                        .chains
+                                                        .first()
+                                                        .unwrap_or(&"".into())
+                                                        .clone(),
+                                                ),
+                                        )
                                     })
                                     .child(
-                                        Chip::new()
-                                            .xsmall()
-                                            .outlined()
+                                        Tag::new()
+                                            .with_size(gpui_component::Size::XSmall)
+                                            .outline()
                                             .child(format!("↑ {} ↓ {}", upload, download)),
                                     )
                                     .when(has_speed, |this| {
                                         this.child(
-                                            Chip::new()
-                                                .xsmall()
-                                                .outlined()
+                                            Tag::new()
+                                                .with_size(gpui_component::Size::XSmall)
+                                                .outline()
                                                 .text_color(theme.primary)
                                                 .child(format!(
                                                     "↑ {}/s ↓ {}/s",

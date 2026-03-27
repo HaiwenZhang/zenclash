@@ -1,11 +1,19 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, Styled, Window,
+};
 use gpui_component::{
-    button::Button, card::Card, chip::Chip, h_flex, input::TextInput, select::Select,
-    switch::Switch, v_flex, ActiveTheme, Icon, IconName, Sizable,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    select::Select,
+    switch::Switch,
+    tag::Tag,
+    v_flex, ActiveTheme, Icon, IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProfileEditData {
     pub name: String,
     pub url: Option<String>,
@@ -47,21 +55,20 @@ impl EditProfileModal {
 }
 
 impl RenderOnce for EditProfileModal {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let on_save = self.on_save.take();
         let on_cancel = self.on_cancel.take();
 
         div()
-            .fixed()
+            .relative()
             .inset_0()
             .bg(theme.background.opacity(0.8))
             .flex()
             .items_center()
             .justify_center()
-            .z_index(1000)
             .child(
-                Card::new()
+                div()
                     .w(px(450.))
                     .p_4()
                     .gap_4()
@@ -217,21 +224,20 @@ impl EditRuleModal {
 }
 
 impl RenderOnce for EditRuleModal {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let on_save = self.on_save.take();
         let on_cancel = self.on_cancel.take();
 
         div()
-            .fixed()
+            .relative()
             .inset_0()
             .bg(theme.background.opacity(0.8))
             .flex()
             .items_center()
             .justify_center()
-            .z_index(1000)
             .child(
-                Card::new()
+                div()
                     .w(px(500.))
                     .p_4()
                     .gap_4()
@@ -390,21 +396,20 @@ impl EditFileModal {
 }
 
 impl RenderOnce for EditFileModal {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let on_save = self.on_save.take();
         let on_cancel = self.on_cancel.take();
 
         div()
-            .fixed()
+            .relative()
             .inset_0()
             .bg(theme.background.opacity(0.8))
             .flex()
             .items_center()
             .justify_center()
-            .z_index(1000)
             .child(
-                Card::new()
+                div()
                     .w(px(700.))
                     .h(px(500.))
                     .p_4()
@@ -421,9 +426,9 @@ impl RenderOnce for EditFileModal {
                                     .child(format!("Edit: {}", self.data.filename)),
                             )
                             .child(
-                                Chip::new()
-                                    .xsmall()
-                                    .outlined()
+                                Tag::new()
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .outline()
                                     .child(self.data.language.clone()),
                             ),
                     )
@@ -433,7 +438,7 @@ impl RenderOnce for EditFileModal {
                             .p_2()
                             .rounded(theme.radius)
                             .bg(theme.muted)
-                            .overflow_scroll()
+                            .overflow_hidden()
                             .font_family("monospace")
                             .text_sm()
                             .child(self.data.content.clone()),

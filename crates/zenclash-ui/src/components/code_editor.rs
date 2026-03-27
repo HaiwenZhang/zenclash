@@ -1,6 +1,11 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, Model, RenderOnce, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, IntoElement, ParentElement, RenderOnce, Styled, Window,
+};
 use gpui_component::{
-    button::Button, card::Card, h_flex, scroll::Scrollable, v_flex, ActiveTheme, Sizable,
+    button::{Button, ButtonVariants},
+    h_flex,
+    scroll::ScrollableElement,
+    v_flex, ActiveTheme, IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
@@ -115,11 +120,10 @@ impl CodeEditor {
             .text_right()
             .text_xs()
             .text_color(theme.muted_foreground)
-            .selectable()
             .children((1..=lines).map(|n| div().child(n.to_string())))
     }
 
-    fn highlight_line(&self, line: &str, theme: &gpui::Theme) -> impl IntoElement {
+    fn highlight_line(&self, line: &str, theme: &gpui_component::Theme) -> impl IntoElement {
         let trimmed = line.trim_start();
         let indent = line.len() - trimmed.len();
 
@@ -135,19 +139,23 @@ impl CodeEditor {
                         colored = colored.child(
                             h_flex()
                                 .gap_1()
-                                .child(div().text_color(theme.primary).child(parts[0]))
+                                .child(div().text_color(theme.primary).child(parts[0].to_string()))
                                 .child(div().child(":"))
-                                .child(div().text_color(theme.muted_foreground).child(parts[1])),
+                                .child(
+                                    div()
+                                        .text_color(theme.muted_foreground)
+                                        .child(parts[1].to_string()),
+                                ),
                         );
                     } else {
-                        colored = colored.child(trimmed);
+                        colored = colored.child(trimmed.to_string());
                     }
                 } else if trimmed.starts_with('-') {
                     colored = colored.text_color(theme.success);
                 } else {
-                    colored = colored.child(trimmed);
+                    colored = colored.child(trimmed.to_string());
                 }
-            },
+            }
             CodeLanguage::JavaScript => {
                 if trimmed.starts_with("//") || trimmed.starts_with("/*") {
                     colored = colored.text_color(theme.muted_foreground);
@@ -160,18 +168,18 @@ impl CodeEditor {
                 {
                     colored = colored.text_color(theme.primary);
                 } else {
-                    colored = colored.child(trimmed);
+                    colored = colored.child(trimmed.to_string());
                 }
-            },
+            }
             CodeLanguage::Json => {
                 if trimmed.starts_with('"') && trimmed.contains(':') {
                     colored = colored.text_color(theme.primary);
                 } else if trimmed.starts_with('"') {
                     colored = colored.text_color(theme.success);
                 } else {
-                    colored = colored.child(trimmed);
+                    colored = colored.child(trimmed.to_string());
                 }
-            },
+            }
             CodeLanguage::Css => {
                 if trimmed.starts_with("/*") || trimmed.starts_with("*") {
                     colored = colored.text_color(theme.muted_foreground);
@@ -180,12 +188,12 @@ impl CodeEditor {
                 } else if trimmed.contains(':') {
                     colored = colored.text_color(theme.warning);
                 } else {
-                    colored = colored.child(trimmed);
+                    colored = colored.child(trimmed.to_string());
                 }
-            },
+            }
             CodeLanguage::Plaintext => {
-                colored = colored.child(trimmed);
-            },
+                colored = colored.child(trimmed.to_string());
+            }
         }
 
         colored
@@ -194,8 +202,8 @@ impl CodeEditor {
 
 impl RenderOnce for CodeEditor {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let theme = cx.theme();
-        let lines: Vec<&str> = self.content.lines().collect();
+        let theme = cx.theme().clone();
+        let lines: Vec<String> = self.content.lines().map(|s| s.to_string()).collect();
 
         v_flex()
             .w_full()
@@ -227,11 +235,15 @@ impl RenderOnce for CodeEditor {
                             .gap_2()
                             .child(
                                 Button::new("wrap")
-                                    .xsmall()
-                                    .icon(IconName::WrapText)
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .icon(IconName::Minus)
                                     .when(self.word_wrap, |this| this.primary()),
                             )
-                            .child(Button::new("copy").xsmall().icon(IconName::Copy)),
+                            .child(
+                                Button::new("copy")
+                                    .with_size(gpui_component::Size::XSmall)
+                                    .icon(IconName::Copy),
+                            ),
                     ),
             )
             .child(
@@ -247,7 +259,7 @@ impl RenderOnce for CodeEditor {
                             .flex_1()
                             .h_full()
                             .p_2()
-                            .overflow_scroll()
+                            .overflow_scrollbar()
                             .font_family("monospace")
                             .text_sm()
                             .when(self.word_wrap, |this| this.whitespace_normal())
@@ -255,9 +267,9 @@ impl RenderOnce for CodeEditor {
                             .children(lines.iter().map(|line| {
                                 div().w_full().min_h(px(20.)).child(
                                     if self.language == CodeLanguage::Plaintext {
-                                        div().child(*line).into_any_element()
+                                        div().child(line.clone()).into_any_element()
                                     } else {
-                                        self.highlight_line(line, theme).into_any_element()
+                                        self.highlight_line(line, &theme).into_any_element()
                                     },
                                 )
                             })),

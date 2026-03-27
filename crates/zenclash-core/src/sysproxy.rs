@@ -1,6 +1,4 @@
-use std::fmt;
-
-pub use sysproxy::{Autoproxy, Sysproxy};
+pub use sysproxy::Sysproxy;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SysproxyError {
@@ -135,7 +133,7 @@ impl SystemProxyManager {
                         .set_system_proxy()
                         .map_err(|e| SysproxyError::SetFailed(e.to_string()))?;
                 }
-            },
+            }
             ProxyMode::Auto => {
                 let pac_url = config.pac_url.as_ref().ok_or_else(|| {
                     SysproxyError::SetFailed("PAC URL required for auto mode".into())
@@ -148,13 +146,13 @@ impl SystemProxyManager {
 
                 #[cfg(not(target_os = "macos"))]
                 {
-                    let auto = Autoproxy {
+                    let auto = sysproxy::Autoproxy {
                         url: pac_url.clone(),
                     };
                     auto.set_auto_proxy()
                         .map_err(|e| SysproxyError::SetFailed(e.to_string()))?;
                 }
-            },
+            }
         }
 
         Ok(())
@@ -170,7 +168,7 @@ impl SystemProxyManager {
         {
             Sysproxy::disable_system_proxy()
                 .map_err(|e| SysproxyError::DisableFailed(e.to_string()))?;
-            Autoproxy::disable_auto_proxy()
+            sysproxy::Autoproxy::disable_auto_proxy()
                 .map_err(|e| SysproxyError::DisableFailed(e.to_string()))?;
         }
 

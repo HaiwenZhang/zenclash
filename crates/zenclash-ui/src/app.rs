@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use gpui::{
-    actions, prelude::FluentBuilder, px, App, Context, Entity, Focusable, IntoElement,
-    ParentElement, Render, SharedString, Styled, Window, WindowBounds, WindowOptions,
+    actions, div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, Focusable, IntoElement,
+    InteractiveElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
+    Window, WindowBounds, WindowOptions,
 };
 use gpui_component::{h_flex, v_flex, ActiveTheme, Root, Theme, ThemeMode, TitleBar};
 use tokio::sync::RwLock;
@@ -12,7 +13,7 @@ use crate::pages::{
     backup::BackupPage, connections::ConnectionsPage, dns::DnsPage, logs::LogsPage,
     profiles::ProfilesPage, proxies::ProxiesPage, rules::RulesPage, settings::SettingsPage, Page,
 };
-use zenclash_core::{AppConfig, CoreManager};
+use zenclash_core::prelude::{AppConfig, CoreManager};
 
 actions!(
     zenclash,
@@ -56,16 +57,17 @@ impl ZenClashApp {
     pub fn new(
         core_manager: Arc<RwLock<CoreManager>>,
         config: Arc<RwLock<AppConfig>>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let proxies_page = cx.new(|cx| ProxiesPage::new(cx));
-        let profiles_page = cx.new(|cx| ProfilesPage::new(cx));
+        let proxies_page = cx.new(|cx| ProxiesPage::new(window, cx));
+        let profiles_page = cx.new(|cx| ProfilesPage::new(window, cx));
         let connections_page = cx.new(|cx| ConnectionsPage::new(cx));
-        let rules_page = cx.new(|cx| RulesPage::new(cx));
+        let rules_page = cx.new(|cx| RulesPage::new(window, cx));
         let logs_page = cx.new(|cx| LogsPage::new(cx));
         let settings_page = cx.new(|cx| SettingsPage::new(cx));
-        let dns_page = cx.new(|cx| DnsPage::new(cx));
-        let backup_page = cx.new(|cx| BackupPage::new(cx));
+        let dns_page = cx.new(|cx| DnsPage::new(window, cx));
+        let backup_page = cx.new(|cx| BackupPage::new(window, cx));
 
         Self {
             core_manager,
@@ -103,7 +105,7 @@ impl ZenClashApp {
         let core_manager = self.core_manager.clone();
         let enabled = self.sysproxy_enabled;
 
-        cx.spawn(|_, _| async move {
+        cx.spawn(async move |_, _| {
             let manager = core_manager.read().await;
             if enabled {
                 manager.enable_sysproxy().await.ok();
@@ -121,7 +123,7 @@ impl ZenClashApp {
         let core_manager = self.core_manager.clone();
         let enabled = self.tun_enabled;
 
-        cx.spawn(|_, _| async move {
+        cx.spawn(async move |_, _| {
             let manager = core_manager.read().await;
             if enabled {
                 manager.enable_tun().await.ok();
@@ -138,7 +140,7 @@ impl ZenClashApp {
         self.outbound_mode = mode;
         let core_manager = self.core_manager.clone();
 
-        cx.spawn(|_, _| async move {
+        cx.spawn(async move |_, _| {
             let manager = core_manager.read().await;
             let mode_str = match mode {
                 OutboundMode::Rule => "rule",
@@ -215,55 +217,13 @@ impl ZenClashApp {
         cx.quit();
     }
 
-    fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let entity = cx.entity().clone();
+    fn render_sidebar(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         ZenSidebar::new()
             .current_page(self.current_page)
             .collapsed(self.sidebar_collapsed)
             .sysproxy_enabled(self.sysproxy_enabled)
             .tun_enabled(self.tun_enabled)
             .outbound_mode(self.outbound_mode)
-            .on_navigate(move |page| {
-                entity.update(&mut gpui::App::global(), |this, cx| {
-                    this.navigate(page, cx);
-                });
-            })
-            .on_toggle_sysproxy(move |enabled| {
-                entity.update(&mut gpui::App::global(), |this, cx| {
-                    this.sysproxy_enabled = enabled;
-                    let core_manager = this.core_manager.clone();
-                    cx.spawn(|_, _| async move {
-                        let manager = core_manager.read().await;
-                        if enabled {
-                            manager.enable_sysproxy().await.ok();
-                        } else {
-                            manager.disable_sysproxy().await.ok();
-                        }
-                    })
-                    .detach();
-                });
-            })
-            .on_toggle_tun(move |enabled| {
-                entity.update(&mut gpui::App::global(), |this, cx| {
-                    this.tun_enabled = enabled;
-                    let core_manager = this.core_manager.clone();
-                    cx.spawn(|_, _| async move {
-                        let manager = core_manager.read().await;
-                        if enabled {
-                            manager.enable_tun().await.ok();
-                        } else {
-                            manager.disable_tun().await.ok();
-                        }
-                    })
-                    .detach();
-                });
-            })
-            .on_change_outbound_mode(move |mode| {
-                entity.update(&mut gpui::App::global(), |this, cx| {
-                    this.set_outbound_mode(mode, cx);
-                });
-            })
-            .into_any_element()
     }
 
     fn render_content(&self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
@@ -276,6 +236,13 @@ impl ZenClashApp {
             Page::Settings => self.settings_page.clone().into_any_element(),
             Page::Dns => self.dns_page.clone().into_any_element(),
             Page::Backup => self.backup_page.clone().into_any_element(),
+            Page::Mihomo => div().into_any_element(),
+            Page::Tun => div().into_any_element(),
+            Page::Sniffer => div().into_any_element(),
+            Page::Resources => div().into_any_element(),
+            Page::Override => div().into_any_element(),
+            Page::Sysproxy => div().into_any_element(),
+            Page::SubStore => div().into_any_element(),
         }
     }
 }
@@ -349,8 +316,8 @@ pub fn create_main_window(
             window.set_window_title(&window_config.title);
             window.activate_window();
 
-            let view = cx.new(|cx| ZenClashApp::new(core_manager, config, cx));
-            cx.new(|cx| Root::new(view, window, cx).bg(cx.theme().background))
+            let view = cx.new(|cx| ZenClashApp::new(core_manager, config, window, cx));
+            cx.new(|cx| Root::new(view, window, cx))
         })
         .expect("Failed to open main window");
     })

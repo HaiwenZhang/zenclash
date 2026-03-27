@@ -59,7 +59,7 @@ pub struct CoreManagerConfig {
 impl CoreManagerConfig {
     pub fn from_app_config(app: &AppConfig) -> Self {
         Self {
-            core_path: crate::utils::dirs::core_path(),
+            core_path: crate::utils::dirs::mihomo_core_dir().join("mihomo"),
             work_dir: crate::utils::dirs::data_dir(),
             config_path: crate::utils::dirs::config_dir().join("config.yaml"),
             api_url: format!("http://127.0.0.1:{}", app.api_port),

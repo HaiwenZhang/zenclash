@@ -1,14 +1,21 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, IntoElement, Model, ParentElement,
-    Render, Styled, Window,
+    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
-    button::Button, h_flex, input::TextInput, select::Select, switch::Switch, tab::Tab,
-    tab_list::TabList, v_flex, ActiveTheme,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    select::Select,
+    switch::Switch,
+    tab::Tab,
+    tab::TabBar,
+    v_flex, ActiveTheme, Disableable, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
 use super::Page;
+use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TunStack {
@@ -72,14 +79,14 @@ impl Default for TunSettings {
 }
 
 pub struct TunPage {
-    settings: Model<TunSettings>,
+    settings: Entity<TunSettings>,
     has_permission: bool,
 }
 
 impl TunPage {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            settings: cx.new_model(|_| TunSettings::default()),
+            settings: cx.new(|_| TunSettings::default()),
             has_permission: false,
         }
     }
@@ -91,7 +98,7 @@ impl TunPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -113,7 +120,7 @@ impl TunPage {
                     .child(
                         Button::new("grant-permission")
                             .child("Grant Permission")
-                            .when(self.has_permission, |this| this.disabled()),
+                            .when(self.has_permission, |this| this.disabled(true)),
                     ),
             )
             .when(cfg!(target_os = "windows"), |this| {
@@ -136,7 +143,7 @@ impl TunPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -208,7 +215,7 @@ impl TunPage {
                         div()
                             .text_sm()
                             .text_color(theme.muted_foreground)
-                            .child(&settings.device),
+                            .child(div().child(settings.device.clone())),
                     ),
             )
             .child(
@@ -234,7 +241,7 @@ impl TunPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -251,7 +258,7 @@ impl TunPage {
                     .child(div().text_sm().child("Auto Route"))
                     .child(
                         Switch::new("auto-route")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.auto_route),
                     ),
             )
@@ -264,7 +271,7 @@ impl TunPage {
                         .child(div().text_sm().child("Auto Redirect"))
                         .child(
                             Switch::new("auto-redirect")
-                                .small()
+                                .with_size(gpui_component::Size::Small)
                                 .checked(settings.auto_redirect),
                         ),
                 )
@@ -277,7 +284,7 @@ impl TunPage {
                     .child(div().text_sm().child("Auto Detect Interface"))
                     .child(
                         Switch::new("auto-detect")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.auto_detect_interface),
                     ),
             )
@@ -289,7 +296,7 @@ impl TunPage {
                     .child(div().text_sm().child("Strict Route"))
                     .child(
                         Switch::new("strict-route")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.strict_route),
                     ),
             )
@@ -335,7 +342,7 @@ impl TunPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -351,19 +358,19 @@ impl TunPage {
                         .justify_between()
                         .py_2()
                         .child(div().text_sm().child("Auto Set DNS (macOS)"))
-                        .child(Switch::new("auto-set-dns").small()),
+                        .child(Switch::new("auto-set-dns").with_size(gpui_component::Size::Small)),
                 )
             })
     }
 }
 
-impl Page for TunPage {
+impl PageTrait for TunPage {
     fn title() -> &'static str {
         "TUN"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::Route
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::Map
     }
 }
 
@@ -373,7 +380,7 @@ impl Render for TunPage {
 
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(

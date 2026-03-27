@@ -61,19 +61,19 @@ impl Page {
         use gpui_component::IconName;
         match self {
             Page::Proxies => IconName::Globe,
-            Page::Profiles => IconName::FileText,
-            Page::Connections => IconName::Link,
-            Page::Rules => IconName::List,
-            Page::Logs => IconName::ScrollText,
-            Page::Mihomo => IconName::Cpu,
-            Page::Tun => IconName::Route,
+            Page::Profiles => IconName::File,
+            Page::Connections => IconName::ExternalLink,
+            Page::Rules => IconName::Menu,
+            Page::Logs => IconName::BookOpen,
+            Page::Mihomo => IconName::Settings,
+            Page::Tun => IconName::Map,
             Page::Sniffer => IconName::Search,
-            Page::Resources => IconName::Database,
-            Page::Dns => IconName::Server,
-            Page::Backup => IconName::Archive,
-            Page::Override => IconName::FileCode,
+            Page::Resources => IconName::Inbox,
+            Page::Dns => IconName::Building2,
+            Page::Backup => IconName::Folder,
+            Page::Override => IconName::File,
             Page::Sysproxy => IconName::Globe,
-            Page::SubStore => IconName::Package,
+            Page::SubStore => IconName::Folder,
             Page::Settings => IconName::Settings,
         }
     }
@@ -84,3 +84,12 @@ impl fmt::Display for Page {
         write!(f, "{}", self.label())
     }
 }
+
+/// Trait for page components
+pub trait PageTrait: Sized {
+    fn title() -> &'static str;
+    fn icon() -> gpui_component::IconName;
+}
+
+// Re-export for backward compatibility
+pub use PageTrait as PageApi;

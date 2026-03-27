@@ -1,16 +1,23 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, IntoElement, Model, ParentElement,
-    Render, Styled, View, Window,
+    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
-    button::Button, h_flex, input::TextInput, select::Select, switch::Switch, tab::Tab,
-    tab_list::TabList, v_flex, ActiveTheme,
+    button::{Button, ButtonVariants},
+    h_flex,
+    input::Input,
+    select::Select,
+    switch::Switch,
+    tab::Tab,
+    tab::TabBar,
+    v_flex, ActiveTheme, Disableable, Sizable,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::Page;
+use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CoreType {
@@ -132,8 +139,8 @@ pub enum SmartCoreStrategy {
 }
 
 pub struct MihomoPage {
-    settings: Model<MihomoSettings>,
-    smart_settings: Model<SmartCoreSettings>,
+    settings: Entity<MihomoSettings>,
+    smart_settings: Entity<SmartCoreSettings>,
     core_version: Option<String>,
     is_upgrading: bool,
 }
@@ -141,8 +148,8 @@ pub struct MihomoPage {
 impl MihomoPage {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            settings: cx.new_model(|_| MihomoSettings::default()),
-            smart_settings: cx.new_model(|_| SmartCoreSettings::default()),
+            settings: cx.new(|_| MihomoSettings::default()),
+            smart_settings: cx.new(|_| SmartCoreSettings::default()),
             core_version: None,
             is_upgrading: false,
         }
@@ -156,7 +163,7 @@ impl MihomoPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -177,7 +184,9 @@ impl MihomoPage {
                             .gap_2()
                             .items_center()
                             .child(div().w(px(80.)).child(settings.mixed_port.to_string()))
-                            .child(Switch::new("mixed-port").small()),
+                            .child(
+                                Switch::new("mixed-port").with_size(gpui_component::Size::Small),
+                            ),
                     ),
             )
             .child(
@@ -191,7 +200,9 @@ impl MihomoPage {
                             .gap_2()
                             .items_center()
                             .child(div().w(px(80.)).child(settings.socks_port.to_string()))
-                            .child(Switch::new("socks-port").small()),
+                            .child(
+                                Switch::new("socks-port").with_size(gpui_component::Size::Small),
+                            ),
                     ),
             )
             .child(
@@ -205,7 +216,7 @@ impl MihomoPage {
                             .gap_2()
                             .items_center()
                             .child(div().w(px(80.)).child(settings.http_port.to_string()))
-                            .child(Switch::new("http-port").small()),
+                            .child(Switch::new("http-port").with_size(gpui_component::Size::Small)),
                     ),
             )
     }
@@ -218,7 +229,7 @@ impl MihomoPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -237,7 +248,7 @@ impl MihomoPage {
                         div()
                             .text_sm()
                             .text_color(theme.muted_foreground)
-                            .child(&settings.external_controller),
+                            .child(div().child(settings.external_controller.clone())),
                     ),
             )
             .child(
@@ -265,7 +276,7 @@ impl MihomoPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -295,7 +306,7 @@ impl MihomoPage {
                         Button::new("upgrade-core")
                             .child("Upgrade Core")
                             .primary()
-                            .when(self.is_upgrading, |this| this.disabled()),
+                            .when(self.is_upgrading, |this| this.disabled(true)),
                     ),
             )
             .child(
@@ -321,7 +332,7 @@ impl MihomoPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .when(smart.enabled, |this| this.border_color(theme.primary))
@@ -335,7 +346,11 @@ impl MihomoPage {
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .child("Smart Core"),
                     )
-                    .child(Switch::new("smart-core").small().checked(smart.enabled)),
+                    .child(
+                        Switch::new("smart-core")
+                            .with_size(gpui_component::Size::Small)
+                            .checked(smart.enabled),
+                    ),
             )
             .when(smart.enabled, |this| {
                 this.child(
@@ -349,7 +364,9 @@ impl MihomoPage {
                                 .py_1()
                                 .child(div().text_xs().child("Use LightGBM"))
                                 .child(
-                                    Switch::new("lightgbm").xsmall().checked(smart.use_lightgbm),
+                                    Switch::new("lightgbm")
+                                        .with_size(gpui_component::Size::XSmall)
+                                        .checked(smart.use_lightgbm),
                                 ),
                         )
                         .child(
@@ -358,7 +375,11 @@ impl MihomoPage {
                                 .justify_between()
                                 .py_1()
                                 .child(div().text_xs().child("Collect Data"))
-                                .child(Switch::new("collect").xsmall().checked(smart.collect_data)),
+                                .child(
+                                    Switch::new("collect")
+                                        .with_size(gpui_component::Size::XSmall)
+                                        .checked(smart.collect_data),
+                                ),
                         )
                         .child(
                             h_flex()
@@ -380,7 +401,7 @@ impl MihomoPage {
             .gap_2()
             .p_4()
             .rounded(theme.radius)
-            .bg(theme.card)
+            .bg(theme.background)
             .border_1()
             .border_color(theme.border)
             .child(
@@ -395,7 +416,11 @@ impl MihomoPage {
                     .justify_between()
                     .py_2()
                     .child(div().text_sm().child("Allow LAN"))
-                    .child(Switch::new("allow-lan").small().checked(settings.allow_lan)),
+                    .child(
+                        Switch::new("allow-lan")
+                            .with_size(gpui_component::Size::Small)
+                            .checked(settings.allow_lan),
+                    ),
             )
             .child(
                 h_flex()
@@ -403,7 +428,11 @@ impl MihomoPage {
                     .justify_between()
                     .py_2()
                     .child(div().text_sm().child("IPv6"))
-                    .child(Switch::new("ipv6").small().checked(settings.ipv6)),
+                    .child(
+                        Switch::new("ipv6")
+                            .with_size(gpui_component::Size::Small)
+                            .checked(settings.ipv6),
+                    ),
             )
             .child(
                 h_flex()
@@ -413,7 +442,7 @@ impl MihomoPage {
                     .child(div().text_sm().child("Unified Delay"))
                     .child(
                         Switch::new("unified-delay")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.unified_delay),
                     ),
             )
@@ -425,7 +454,7 @@ impl MihomoPage {
                     .child(div().text_sm().child("TCP Concurrent"))
                     .child(
                         Switch::new("tcp-concurrent")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.tcp_concurrent),
                     ),
             )
@@ -437,20 +466,20 @@ impl MihomoPage {
                     .child(div().text_sm().child("Store Selected"))
                     .child(
                         Switch::new("store-selected")
-                            .small()
+                            .with_size(gpui_component::Size::Small)
                             .checked(settings.store_selected),
                     ),
             )
     }
 }
 
-impl Page for MihomoPage {
+impl PageTrait for MihomoPage {
     fn title() -> &'static str {
         "Mihomo"
     }
 
-    fn icon() -> gpui_component::icon::IconName {
-        gpui_component::icon::IconName::Cpu
+    fn icon() -> gpui_component::IconName {
+        gpui_component::IconName::Settings
     }
 }
 
@@ -460,7 +489,7 @@ impl Render for MihomoPage {
 
         v_flex()
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_hidden()
             .gap_4()
             .p_4()
             .child(

@@ -1,20 +1,20 @@
 use std::sync::Arc;
 
-use gpui::{
-    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window,
+use gpui::{prelude::FluentBuilder, InteractiveElement, AppContext,
+    div, px, App, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    Render, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
     input::{Input, InputState},
     v_flex,
-    virtual_list::VirtualList,
-    ActiveTheme, Icon, IconName,
+    VirtualList,
+    ActiveTheme, Disableable, Icon, IconName, Sizable,
 };
 use tokio::sync::RwLock;
 
-use zenclash_core::{CoreManager, DelayTestResult, DelayTester, Proxy, ProxyGroup};
+use zenclash_core::prelude::{ApiClientConfig, CoreManager, DelayTestResult, DelayTester, ProxyGroup};
 
 pub struct ProxiesPage {
     proxy_groups: Vec<ProxyGroup>,
@@ -28,14 +28,11 @@ pub struct ProxiesPage {
 
 impl ProxiesPage {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search_query =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search proxies..."));
-
         Self {
             proxy_groups: Vec::new(),
             selected_group: None,
             selected_proxy: None,
-            search_query,
+            search_query: cx.new(|cx| InputState::new(window, cx).placeholder("Search proxies...")),
             delay_results: std::collections::HashMap::new(),
             is_testing_delay: false,
             focus_handle: cx.focus_handle(),
@@ -56,8 +53,8 @@ impl ProxiesPage {
     }
 
     pub fn select_proxy(&mut self, group_name: String, proxy_name: String, cx: &mut Context<Self>) {
-        self.selected_group = Some(group_name);
-        self.selected_proxy = Some(proxy_name);
+        self.selected_group = Some(group_name.clone());
+        self.selected_proxy = Some(proxy_name.clone());
         cx.notify();
 
         cx.emit(ProxyPageEvent::ProxySelected {
@@ -75,23 +72,34 @@ impl ProxiesPage {
         cx.notify();
 
         let groups = self.proxy_groups.clone();
-        cx.spawn(async move |this, mut cx| {
-            let tester = DelayTester::default();
+        cx.spawn(async move |this, cx| {
+            use zenclash_core::prelude::ApiClient;
+            let client = match ApiClient::new(ApiClientConfig::default()) {
+                Ok(c) => c,
+                Err(_) => {
+                    this.update(cx, |this, cx| {
+                        this.is_testing_delay = false;
+                        cx.notify();
+                    })
+                    .ok();
+                    return;
+                }
+            };
+            let tester = DelayTester::new_default(client);
 
             for group in &groups {
                 for proxy in &group.proxies {
-                    if let Ok(result) = tester.test_proxy(proxy).await {
-                        this.update(&mut cx, |this, cx| {
-                            this.delay_results
-                                .insert(proxy.name.clone(), result.delay_ms);
-                            cx.notify();
-                        })
-                        .ok();
-                    }
+                    let result = tester.test_single(proxy).await;
+                    this.update(cx, |this, cx| {
+                        this.delay_results
+                            .insert(proxy.clone(), result.delay.unwrap_or(0));
+                        cx.notify();
+                    })
+                    .ok();
                 }
             }
 
-            this.update(&mut cx, |this, cx| {
+            this.update(cx, |this, cx| {
                 this.is_testing_delay = false;
                 cx.notify();
             })
@@ -105,7 +113,7 @@ impl ProxiesPage {
         let delay_text = if let Some(delay) = group
             .proxies
             .iter()
-            .filter_map(|p| self.delay_results.get(&p.name))
+            .filter_map(|p| self.delay_results.get(p))
             .min()
         {
             format!("{} ms", delay)
@@ -142,27 +150,34 @@ impl ProxiesPage {
 
     fn render_proxy_item(
         &self,
-        proxy: &Proxy,
+        proxy_name: &str,
         group_name: &str,
         cx: &Context<Self>,
-    ) -> impl IntoElement {
-        let is_selected = self.selected_proxy.as_ref() == Some(&proxy.name);
-        let delay = self.delay_results.get(&proxy.name).copied();
+    ) -> impl IntoElement + StatefulInteractiveElement {
+        let is_selected = self.selected_proxy.as_ref() == Some(&proxy_name.to_string());
+        let delay = self.delay_results.get(proxy_name).copied();
+        let group_name = group_name.to_string();
+        let proxy_name = proxy_name.to_string();
+        let proxy_name_for_closure = proxy_name.clone();
 
         h_flex()
+            .id(SharedString::from(format!("proxy-item-{}-{}", group_name, proxy_name)))
             .gap_2()
             .p_2()
             .pl_6()
             .cursor_pointer()
             .when(is_selected, |this| this.bg(cx.theme().primary.opacity(0.2)))
-            .child(div().child(proxy.name.clone()))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.select_proxy(group_name.clone(), proxy_name_for_closure.clone(), cx);
+            }))
+            .child(div().child(proxy_name))
             .child(div().flex_1())
             .child(
                 div()
                     .text_color(match delay {
                         Some(d) if d < 100 => cx.theme().success,
                         Some(d) if d < 300 => cx.theme().warning,
-                        Some(_) => cx.theme().destructive,
+                        Some(_) => cx.theme().danger,
                         None => cx.theme().muted_foreground,
                     })
                     .child(match delay {
@@ -208,7 +223,7 @@ impl Render for ProxiesPage {
                             })),
                     ),
             )
-            .child(Input::new(&search, window, cx).placeholder("Search proxies..."))
+            .child(Input::new(&search))
             .child(
                 div()
                     .flex_1()
@@ -216,28 +231,20 @@ impl Render for ProxiesPage {
                     .child(
                         v_flex()
                             .gap_1()
-                            .children(self.proxy_groups.iter().map(|group| {
-                                let group_name = group.name.clone();
-                                let group_clone = group.clone();
+                            .children({
+                                let proxy_groups = self.proxy_groups.clone();
+                                proxy_groups.iter().map(|group| {
+                                    let group_name = group.name.clone();
+                                    let proxies: Vec<_> = group.proxies.iter().map(|proxy| {
+                                        self.render_proxy_item(proxy, &group_name, cx)
+                                    }).collect();
 
-                                v_flex()
-                                    .gap_0()
-                                    .child(self.render_group_header(group, cx))
-                                    .children(group.proxies.iter().map(move |proxy| {
-                                        let proxy_name = proxy.name.clone();
-                                        let group_name_clone = group_name.clone();
-
-                                        self.render_proxy_item(proxy, &group_name, cx).on_click(
-                                            cx.listener(move |this, _, _, cx| {
-                                                this.select_proxy(
-                                                    group_name_clone.clone(),
-                                                    proxy_name.clone(),
-                                                    cx,
-                                                );
-                                            }),
-                                        )
-                                    }))
-                            })),
+                                    v_flex()
+                                        .gap_0()
+                                        .child(self.render_group_header(group, cx))
+                                        .children(proxies)
+                                }).collect::<Vec<_>>()
+                            }),
                     ),
             )
     }

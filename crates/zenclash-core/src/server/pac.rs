@@ -74,7 +74,7 @@ impl PacServer {
     }
 
     pub async fn start(&self) -> Result<(), PacServerError> {
-        let mut running = self.running.write().await;
+        let running = self.running.write().await;
         if *running {
             return Ok(());
         }
@@ -85,10 +85,11 @@ impl PacServer {
         let custom_script = config.custom_script.clone();
         let start_port = config.port;
         drop(config);
+        drop(running);
 
         let addr: SocketAddr = format!("{}:{}", host, start_port)
             .parse()
-            .map_err(|e| PacServerError::StartFailed(e.to_string()))?;
+            .map_err(|e: std::net::AddrParseError| PacServerError::StartFailed(e.to_string()))?;
 
         let port = Arc::clone(&self.port);
         let running_flag = Arc::clone(&self.running);
@@ -170,7 +171,7 @@ pub async fn find_available_port(start_port: u16) -> Result<u16, PacServerError>
     for port in start_port..=65535 {
         let addr: SocketAddr = format!("127.0.0.1:{}", port)
             .parse()
-            .map_err(|e| PacServerError::StartFailed(e.to_string()))?;
+            .map_err(|e: std::net::AddrParseError| PacServerError::StartFailed(e.to_string()))?;
 
         match TcpListener::bind(&addr).await {
             Ok(listener) => {

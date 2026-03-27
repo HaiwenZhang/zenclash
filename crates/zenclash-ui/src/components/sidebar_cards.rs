@@ -1,5 +1,8 @@
-use gpui::{div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
-use gpui_component::{card::Card, h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement, Styled, Window,
+};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +56,7 @@ impl Default for CoreCard {
 }
 
 impl RenderOnce for CoreCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let version = self
             .info
@@ -63,13 +66,14 @@ impl RenderOnce for CoreCard {
         let memory = self
             .info
             .as_ref()
-            .map(|i| zenclash_core::format_traffic(i.memory))
+            .map(|i| zenclash_core::prelude::format_traffic(i.memory))
             .unwrap_or_else(|| "-".into());
 
         let on_click = self.on_click.take();
         let on_restart = self.on_restart.take();
 
-        Card::new()
+        div()
+            .id("core-card")
             .p_3()
             .gap_1()
             .when(self.is_selected, |this| this.bg(theme.primary))
@@ -88,8 +92,8 @@ impl RenderOnce for CoreCard {
                     )
                     .child(
                         gpui_component::button::Button::new("restart")
-                            .xsmall()
-                            .icon(Icon::new(IconName::Refresh))
+                            .with_size(gpui_component::Size::XSmall)
+                            .icon(Icon::new(IconName::LoaderCircle))
                             .when(self.is_selected, |this| {
                                 this.text_color(theme.primary_foreground)
                             })
@@ -107,7 +111,7 @@ impl RenderOnce for CoreCard {
                     .when(self.is_selected, |this| {
                         this.text_color(theme.primary_foreground)
                     })
-                    .otherwise(|this| this.text_color(theme.foreground))
+                    .when(!self.is_selected, |this| this.text_color(theme.foreground))
                     .child("Core")
                     .child(memory),
             )
@@ -167,11 +171,12 @@ impl Default for ConnectionCard {
 }
 
 impl RenderOnce for ConnectionCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let on_click = self.on_click.take();
 
-        Card::new()
+        div()
+            .id("connection-card")
             .p_3()
             .gap_1()
             .when(self.is_selected, |this| this.bg(theme.primary))
@@ -186,7 +191,7 @@ impl RenderOnce for ConnectionCard {
                             .when(self.is_selected, |this| {
                                 this.text_color(theme.primary_foreground)
                             })
-                            .otherwise(|this| this.text_color(theme.foreground))
+                            .when(!self.is_selected, |this| this.text_color(theme.foreground))
                             .child(format!("{} Connections", self.count)),
                     )
                     .child(
@@ -195,11 +200,13 @@ impl RenderOnce for ConnectionCard {
                             .when(self.is_selected, |this| {
                                 this.text_color(theme.primary_foreground)
                             })
-                            .otherwise(|this| this.text_color(theme.muted_foreground))
+                            .when(!self.is_selected, |this| {
+                                this.text_color(theme.muted_foreground)
+                            })
                             .child(format!(
                                 "↑ {} ↓ {}",
-                                zenclash_core::format_speed(self.upload_speed),
-                                zenclash_core::format_speed(self.download_speed)
+                                zenclash_core::prelude::format_speed(self.upload_speed),
+                                zenclash_core::prelude::format_speed(self.download_speed)
                             )),
                     ),
             )
@@ -266,14 +273,15 @@ impl Default for ProfileCard {
 }
 
 impl RenderOnce for ProfileCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let name = self.name.unwrap_or_else(|| "No Profile".into());
         let has_traffic = self.traffic_total > 0;
 
         let on_click = self.on_click.take();
 
-        Card::new()
+        div()
+            .id("profile-card")
             .p_3()
             .gap_1()
             .when(self.is_selected, |this| this.bg(theme.primary))
@@ -290,8 +298,8 @@ impl RenderOnce for ProfileCard {
                     .child(name),
             )
             .when(has_traffic, |this| {
-                let used = zenclash_core::format_traffic(self.traffic_used);
-                let total = zenclash_core::format_traffic(self.traffic_total);
+                let used = zenclash_core::prelude::format_traffic(self.traffic_used);
+                let total = zenclash_core::prelude::format_traffic(self.traffic_total);
                 let expire_text = self
                     .expire
                     .map(|e| {
@@ -308,7 +316,9 @@ impl RenderOnce for ProfileCard {
                         .when(self.is_selected, |this| {
                             this.text_color(theme.primary_foreground)
                         })
-                        .otherwise(|this| this.text_color(theme.muted_foreground))
+                        .when(!self.is_selected, |this| {
+                            this.text_color(theme.muted_foreground)
+                        })
                         .child(format!("{}/{}", used, total))
                         .child(expire_text),
                 )
@@ -359,11 +369,12 @@ impl Default for RuleCard {
 }
 
 impl RenderOnce for RuleCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let on_click = self.on_click.take();
 
-        Card::new()
+        div()
+            .id("rule-card")
             .p_3()
             .gap_1()
             .when(self.is_selected, |this| this.bg(theme.primary))
@@ -372,14 +383,14 @@ impl RenderOnce for RuleCard {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(Icon::new(IconName::List).size_4())
+                    .child(Icon::new(IconName::Menu).size_4())
                     .child(
                         div()
                             .text_xs()
                             .when(self.is_selected, |this| {
                                 this.text_color(theme.primary_foreground)
                             })
-                            .otherwise(|this| this.text_color(theme.foreground))
+                            .when(!self.is_selected, |this| this.text_color(theme.foreground))
                             .child(format!("{} Rules", self.count)),
                     ),
             )
