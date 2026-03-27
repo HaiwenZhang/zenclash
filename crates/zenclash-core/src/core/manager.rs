@@ -252,6 +252,13 @@ impl CoreManager {
         client.get_proxies().await.map_err(Into::into)
     }
 
+    pub async fn get_rules(&self) -> Result<crate::core::api::RulesResponse, CoreManagerError> {
+        let client = self.api_client.read().await;
+        let client = client.as_ref().ok_or(CoreManagerError::NotRunning)?;
+
+        client.get_rules().await.map_err(Into::into)
+    }
+
     pub async fn select_proxy(&self, group: &str, proxy: &str) -> Result<(), CoreManagerError> {
         let client = self.api_client.read().await;
         let client = client.as_ref().ok_or(CoreManagerError::NotRunning)?;

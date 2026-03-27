@@ -22,7 +22,7 @@ pub mod prelude {
     pub use crate::core::{
         ApiClient, ApiClientConfig, ConfigFactory, ConnectionItem, CoreManager, CoreManagerConfig,
         CoreState, DnsManager, FactoryError, LogItem, LogStream, Process, ProcessConfig,
-        ProcessState, ProfileUpdater, SubStoreClient, TrafficData, TrafficStream,
+        ProcessState, ProfileUpdater, RuleItem, SubStoreClient, TrafficData, TrafficStream,
     };
     pub use crate::error::{Result, ZenClashError};
     pub use crate::proxy::{

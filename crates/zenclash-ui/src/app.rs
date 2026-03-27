@@ -11,7 +11,9 @@ use parking_lot::RwLock;
 use crate::components::sidebar::{OutboundMode, ZenSidebar};
 use crate::pages::{
     backup::BackupPage, connections::ConnectionsPage, dns::DnsPage, logs::LogsPage,
-    profiles::ProfilesPage, proxies::ProxiesPage, rules::RulesPage, settings::SettingsPage, Page,
+    mihomo::MihomoPage, override_page::OverridePage, profiles::ProfilesPage, proxies::ProxiesPage,
+    resources::ResourcesPage, rules::RulesPage, settings::SettingsPage, sniffer::SnifferPage,
+    substore::SubStorePage, sysproxy::SysproxyPage, tun::TunPage, Page,
 };
 use zenclash_core::prelude::{AppConfig, CoreManager, CoreState};
 
@@ -54,6 +56,13 @@ pub struct ZenClashApp {
     settings_page: Entity<SettingsPage>,
     dns_page: Entity<DnsPage>,
     backup_page: Entity<BackupPage>,
+    mihomo_page: Entity<MihomoPage>,
+    tun_page: Entity<TunPage>,
+    sniffer_page: Entity<SnifferPage>,
+    resources_page: Entity<ResourcesPage>,
+    override_page: Entity<OverridePage>,
+    sysproxy_page: Entity<SysproxyPage>,
+    substore_page: Entity<SubStorePage>,
 }
 
 impl ZenClashApp {
@@ -66,11 +75,18 @@ impl ZenClashApp {
         let proxies_page = cx.new(|cx| ProxiesPage::new(core_manager.clone(), window, cx));
         let profiles_page = cx.new(|cx| ProfilesPage::new(window, cx));
         let connections_page = cx.new(|cx| ConnectionsPage::new(core_manager.clone(), cx));
-        let rules_page = cx.new(|cx| RulesPage::new(window, cx));
+        let rules_page = cx.new(|cx| RulesPage::new(core_manager.clone(), cx));
         let logs_page = cx.new(|cx| LogsPage::new(cx));
         let settings_page = cx.new(|cx| SettingsPage::new(cx));
         let dns_page = cx.new(|cx| DnsPage::new(window, cx));
         let backup_page = cx.new(|cx| BackupPage::new(window, cx));
+        let mihomo_page = cx.new(|cx| MihomoPage::new(cx));
+        let tun_page = cx.new(|cx| TunPage::new(cx));
+        let sniffer_page = cx.new(|cx| SnifferPage::new(cx));
+        let resources_page = cx.new(|cx| ResourcesPage::new(cx));
+        let override_page = cx.new(|cx| OverridePage::new(cx));
+        let sysproxy_page = cx.new(|cx| SysproxyPage::new(cx));
+        let substore_page = cx.new(|cx| SubStorePage::new(cx));
 
         Self {
             core_manager,
@@ -91,6 +107,13 @@ impl ZenClashApp {
             settings_page,
             dns_page,
             backup_page,
+            mihomo_page,
+            tun_page,
+            sniffer_page,
+            resources_page,
+            override_page,
+            sysproxy_page,
+            substore_page,
         }
     }
 
@@ -307,13 +330,13 @@ impl ZenClashApp {
             Page::Settings => self.settings_page.clone().into_any_element(),
             Page::Dns => self.dns_page.clone().into_any_element(),
             Page::Backup => self.backup_page.clone().into_any_element(),
-            Page::Mihomo => div().into_any_element(),
-            Page::Tun => div().into_any_element(),
-            Page::Sniffer => div().into_any_element(),
-            Page::Resources => div().into_any_element(),
-            Page::Override => div().into_any_element(),
-            Page::Sysproxy => div().into_any_element(),
-            Page::SubStore => div().into_any_element(),
+            Page::Mihomo => self.mihomo_page.clone().into_any_element(),
+            Page::Tun => self.tun_page.clone().into_any_element(),
+            Page::Sniffer => self.sniffer_page.clone().into_any_element(),
+            Page::Resources => self.resources_page.clone().into_any_element(),
+            Page::Override => self.override_page.clone().into_any_element(),
+            Page::Sysproxy => self.sysproxy_page.clone().into_any_element(),
+            Page::SubStore => self.substore_page.clone().into_any_element(),
         }
     }
 }
