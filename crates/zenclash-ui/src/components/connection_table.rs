@@ -1,4 +1,7 @@
-use gpui::{InteractiveElement, ParentElement, div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
+use gpui::{
+    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, Styled, Window,
+};
 use gpui_component::{h_flex, v_flex, ActiveTheme};
 
 use super::ConnectionInfo;

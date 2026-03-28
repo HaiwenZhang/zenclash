@@ -1,5 +1,6 @@
 pub mod backup;
 pub mod connections;
+pub mod dashboard;
 pub mod dns;
 pub mod logs;
 pub mod mihomo;
@@ -19,6 +20,7 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Page {
     #[default]
+    Dashboard,
     Proxies,
     Profiles,
     Connections,
@@ -39,6 +41,7 @@ pub enum Page {
 impl Page {
     pub fn label(&self) -> &'static str {
         match self {
+            Page::Dashboard => "Dashboard",
             Page::Proxies => "Proxies",
             Page::Profiles => "Profiles",
             Page::Connections => "Connections",
@@ -60,6 +63,7 @@ impl Page {
     pub fn icon(&self) -> gpui_component::IconName {
         use gpui_component::IconName;
         match self {
+            Page::Dashboard => IconName::LayoutDashboard,
             Page::Proxies => IconName::Globe,
             Page::Profiles => IconName::File,
             Page::Connections => IconName::ExternalLink,

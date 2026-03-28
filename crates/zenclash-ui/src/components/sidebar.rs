@@ -2,14 +2,9 @@ use gpui::{
     div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
-use gpui_component::{
-    h_flex,
-    sidebar::{Sidebar, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuItem},
-    v_flex, ActiveTheme, Icon, IconName, Side,
-};
-use zenclash_core::prelude::CoreState;
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName};
+use zenclash_core::prelude::{format_speed, CoreState};
 
-use crate::app::{StartCore, StopCore};
 use crate::pages::Page;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -38,6 +33,8 @@ pub struct ZenSidebar {
     tun_enabled: bool,
     outbound_mode: OutboundMode,
     core_state: CoreState,
+    upload_speed: u64,
+    download_speed: u64,
 }
 
 impl ZenSidebar {
@@ -49,6 +46,8 @@ impl ZenSidebar {
             tun_enabled: false,
             outbound_mode: OutboundMode::default(),
             core_state: CoreState::Stopped,
+            upload_speed: 0,
+            download_speed: 0,
         }
     }
 
@@ -81,6 +80,12 @@ impl ZenSidebar {
         self.core_state = state;
         self
     }
+
+    pub fn traffic(mut self, upload: u64, download: u64) -> Self {
+        self.upload_speed = upload;
+        self.download_speed = download;
+        self
+    }
 }
 
 impl Default for ZenSidebar {
@@ -92,129 +97,222 @@ impl Default for ZenSidebar {
 impl RenderOnce for ZenSidebar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
+        let width = px(if self.collapsed { 48. } else { 220. });
+        let is_running = self.core_state == CoreState::Running;
+        let current_page = self.current_page;
+        let collapsed = self.collapsed;
 
+        v_flex()
+            .w(width)
+            .h_full()
+            .bg(theme.background)
+            .border_r_1()
+            .border_color(theme.border)
+            .child(Self::render_header(&theme, collapsed))
+            .child(Self::render_core_status(&theme, is_running, collapsed))
+            .child(Self::render_nav(&theme, current_page, collapsed))
+            .child(Self::render_footer(
+                &theme,
+                collapsed,
+                self.upload_speed,
+                self.download_speed,
+            ))
+    }
+}
+
+impl ZenSidebar {
+    fn render_header(theme: &gpui_component::Theme, collapsed: bool) -> impl IntoElement {
+        h_flex()
+            .items_center()
+            .gap_2()
+            .p_2()
+            .border_b_1()
+            .border_color(theme.border)
+            .child(Icon::new(IconName::Star).size_5().text_color(theme.primary))
+            .when(!collapsed, |this| {
+                this.child(
+                    v_flex()
+                        .gap_0()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .child("ZenClash"),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.muted_foreground)
+                                .child("Proxy Manager"),
+                        ),
+                )
+            })
+    }
+
+    fn render_core_status(
+        theme: &gpui_component::Theme,
+        is_running: bool,
+        collapsed: bool,
+    ) -> impl IntoElement {
+        let state_color = if is_running {
+            theme.success
+        } else {
+            theme.muted_foreground
+        };
+
+        h_flex()
+            .items_center()
+            .gap_2()
+            .p_2()
+            .border_b_1()
+            .border_color(theme.border)
+            .child(div().size_2().rounded_full().bg(state_color))
+            .when(!collapsed, |this| {
+                this.child(div().flex_1().text_xs().child(if is_running {
+                    "Running"
+                } else {
+                    "Stopped"
+                }))
+            })
+    }
+
+    fn render_nav(
+        theme: &gpui_component::Theme,
+        current_page: Page,
+        collapsed: bool,
+    ) -> impl IntoElement {
         let pages = [
+            Page::Dashboard,
             Page::Proxies,
             Page::Profiles,
             Page::Connections,
             Page::Rules,
             Page::Logs,
+            Page::Mihomo,
+            Page::Tun,
+            Page::Sniffer,
+            Page::Dns,
+            Page::Resources,
+            Page::Override,
+            Page::Sysproxy,
+            Page::Backup,
+            Page::SubStore,
             Page::Settings,
         ];
 
-        let is_running = self.core_state == CoreState::Running;
-        let state_color = match self.core_state {
-            CoreState::Running => theme.success,
-            CoreState::Starting => theme.warning,
-            CoreState::Stopping => theme.warning,
-            CoreState::Error => theme.danger,
-            CoreState::Stopped => theme.muted_foreground,
-        };
-        let state_text = match self.core_state {
-            CoreState::Running => "Running",
-            CoreState::Starting => "Starting...",
-            CoreState::Stopping => "Stopping...",
-            CoreState::Error => "Error",
-            CoreState::Stopped => "Stopped",
-        };
-
-        Sidebar::<SidebarMenu>::new(Side::Left)
-            .collapsed(self.collapsed)
-            .w(px(if self.collapsed { 48. } else { 220. }))
+        v_flex()
+            .flex_1()
             .gap_0()
-            .header(
-                SidebarHeader::new()
+            .overflow_hidden()
+            .p_1()
+            .children(pages.iter().map(move |page| {
+                let is_active = *page == current_page;
+                let page_label = page.label();
+                let page_for_click = *page;
+
+                let bg = if is_active {
+                    theme.primary
+                } else {
+                    theme.transparent
+                };
+                let text_color = if is_active {
+                    theme.primary_foreground
+                } else {
+                    theme.foreground
+                };
+
+                div()
+                    .id(page_label)
+                    .w_full()
+                    .px_2()
+                    .py_1()
+                    .rounded(theme.radius)
+                    .cursor_pointer()
+                    .bg(bg)
+                    .text_color(text_color)
+                    .hover(|this| {
+                        if !is_active {
+                            this.bg(theme.muted)
+                        } else {
+                            this
+                        }
+                    })
                     .child(
                         h_flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(theme.radius)
-                            .bg(theme.primary)
-                            .text_color(theme.primary_foreground)
-                            .size_8()
-                            .flex_shrink_0()
-                            .when(!self.collapsed, |this| {
-                                this.child(Icon::new(IconName::Star).size_4())
-                            })
-                            .when(self.collapsed, |this| {
-                                this.size_4()
-                                    .bg(theme.transparent)
-                                    .text_color(theme.foreground)
-                                    .child(Icon::new(IconName::Star).size_4())
-                            }),
-                    )
-                    .when(!self.collapsed, |this| {
-                        this.child(
-                            v_flex()
-                                .gap_0()
-                                .text_sm()
-                                .flex_1()
-                                .line_height(gpui::relative(1.25))
-                                .overflow_hidden()
-                                .text_ellipsis()
-                                .child("ZenClash")
-                                .child(
-                                    div()
-                                        .child("Proxy Manager")
-                                        .text_xs()
-                                        .text_color(theme.muted_foreground),
-                                ),
-                        )
-                    }),
-            )
-            .footer(
-                SidebarFooter::new()
-                    .child(
-                        h_flex()
-                            .items_center()
                             .gap_2()
-                            .p_2()
-                            .child(div().size_2().rounded_full().bg(state_color))
-                            .when(!self.collapsed, |this| {
-                                this.child(div().flex_1().text_xs().child(state_text))
-                                    .child(
-                                        h_flex().gap_1().child(
-                                            div()
-                                                .id("toggle-core-btn")
-                                                .px_2()
-                                                .py_1()
-                                                .rounded(theme.radius)
-                                                .cursor_pointer()
-                                                .bg(if is_running {
-                                                    theme.danger
-                                                } else {
-                                                    theme.primary
-                                                })
-                                                .text_color(if is_running {
-                                                    theme.background
-                                                } else {
-                                                    theme.primary_foreground
-                                                })
-                                                .text_xs()
-                                                .child(if is_running { "Stop" } else { "Start" })
-                                                .on_click(move |_, window, cx| {
-                                                    if is_running {
-                                                        window.dispatch_action(
-                                                            Box::new(StopCore),
-                                                            cx,
-                                                        );
-                                                    } else {
-                                                        window.dispatch_action(
-                                                            Box::new(StartCore),
-                                                            cx,
-                                                        );
-                                                    }
-                                                }),
-                                        ),
-                                    )
+                            .items_center()
+                            .child(Icon::new(page.icon()).size_4())
+                            .when(!collapsed, |this| {
+                                this.child(div().text_xs().child(page_label))
                             }),
                     )
-                    .child(SidebarMenu::new().children(pages.into_iter().map(|page| {
-                        let is_active = self.current_page == page;
-                        SidebarMenuItem::new(page.label())
-                            .icon(page.icon())
-                            .active(is_active)
-                    }))),
-            )
+                    .on_click(move |_, window, cx| {
+                        dispatch_navigate(page_for_click, window, cx);
+                    })
+            }))
+    }
+
+    fn render_footer(
+        theme: &gpui_component::Theme,
+        collapsed: bool,
+        upload_speed: u64,
+        download_speed: u64,
+    ) -> impl IntoElement {
+        h_flex()
+            .items_center()
+            .justify_center()
+            .gap_2()
+            .p_2()
+            .border_t_1()
+            .border_color(theme.border)
+            .text_xs()
+            .when(collapsed, |this| {
+                this.child(
+                    v_flex()
+                        .gap_1()
+                        .items_center()
+                        .child(div().text_color(gpui::rgb(0x4ade80)).child("↑"))
+                        .child(div().text_color(gpui::rgb(0x60a5fa)).child("↓")),
+                )
+            })
+            .when(!collapsed, |this| {
+                this.child(
+                    h_flex()
+                        .gap_2()
+                        .flex_1()
+                        .child(
+                            div()
+                                .text_color(gpui::rgb(0x4ade80))
+                                .child(format!("↑ {}", format_speed(upload_speed))),
+                        )
+                        .child(
+                            div()
+                                .text_color(gpui::rgb(0x60a5fa))
+                                .child(format!("↓ {}", format_speed(download_speed))),
+                        ),
+                )
+            })
+    }
+}
+
+fn dispatch_navigate(page: Page, window: &mut Window, cx: &mut App) {
+    use crate::app::*;
+    match page {
+        Page::Dashboard => window.dispatch_action(Box::new(NavigateDashboard), cx),
+        Page::Proxies => window.dispatch_action(Box::new(NavigateProxies), cx),
+        Page::Profiles => window.dispatch_action(Box::new(NavigateProfiles), cx),
+        Page::Connections => window.dispatch_action(Box::new(NavigateConnections), cx),
+        Page::Rules => window.dispatch_action(Box::new(NavigateRules), cx),
+        Page::Logs => window.dispatch_action(Box::new(NavigateLogs), cx),
+        Page::Mihomo => window.dispatch_action(Box::new(NavigateMihomo), cx),
+        Page::Tun => window.dispatch_action(Box::new(NavigateTun), cx),
+        Page::Sniffer => window.dispatch_action(Box::new(NavigateSniffer), cx),
+        Page::Dns => window.dispatch_action(Box::new(NavigateDns), cx),
+        Page::Resources => window.dispatch_action(Box::new(NavigateResources), cx),
+        Page::Override => window.dispatch_action(Box::new(NavigateOverride), cx),
+        Page::Sysproxy => window.dispatch_action(Box::new(NavigateSysproxy), cx),
+        Page::Backup => window.dispatch_action(Box::new(NavigateBackup), cx),
+        Page::SubStore => window.dispatch_action(Box::new(NavigateSubStore), cx),
+        Page::Settings => window.dispatch_action(Box::new(NavigateSettings), cx),
     }
 }

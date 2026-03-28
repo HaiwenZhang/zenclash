@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder, App, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, Styled, Window,
+    div, prelude::FluentBuilder, App, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    SharedString, Styled, Window,
 };
 use gpui_component::{
     button::Button, h_flex, switch::Switch, tag::Tag, ActiveTheme, Icon, IconName, Sizable,

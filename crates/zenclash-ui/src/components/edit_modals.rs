@@ -1,6 +1,5 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, IntoElement, ParentElement,
-    RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder, px, App, IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},

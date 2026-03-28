@@ -1,11 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, IntoElement, ParentElement,
-    RenderOnce, Styled, Window,
+    div, prelude::FluentBuilder, px, App, IntoElement, ParentElement, RenderOnce, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
-    h_flex,
-    v_flex, ActiveTheme, Icon, IconName,
+    h_flex, v_flex, ActiveTheme, Icon, IconName,
 };
 
 pub struct ConfirmModal {

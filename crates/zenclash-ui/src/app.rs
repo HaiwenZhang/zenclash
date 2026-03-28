@@ -10,10 +10,10 @@ use parking_lot::RwLock;
 
 use crate::components::sidebar::{OutboundMode, ZenSidebar};
 use crate::pages::{
-    backup::BackupPage, connections::ConnectionsPage, dns::DnsPage, logs::LogsPage,
-    mihomo::MihomoPage, override_page::OverridePage, profiles::ProfilesPage, proxies::ProxiesPage,
-    resources::ResourcesPage, rules::RulesPage, settings::SettingsPage, sniffer::SnifferPage,
-    substore::SubStorePage, sysproxy::SysproxyPage, tun::TunPage, Page,
+    backup::BackupPage, connections::ConnectionsPage, dashboard::DashboardPage, dns::DnsPage,
+    logs::LogsPage, mihomo::MihomoPage, override_page::OverridePage, profiles::ProfilesPage,
+    proxies::ProxiesPage, resources::ResourcesPage, rules::RulesPage, settings::SettingsPage,
+    sniffer::SnifferPage, substore::SubStorePage, sysproxy::SysproxyPage, tun::TunPage, Page,
 };
 use zenclash_core::prelude::{AppConfig, CoreManager, CoreState};
 
@@ -22,6 +22,7 @@ actions!(
     [
         Quit,
         ToggleSidebar,
+        NavigateDashboard,
         NavigateProxies,
         NavigateProfiles,
         NavigateConnections,
@@ -30,8 +31,18 @@ actions!(
         NavigateSettings,
         NavigateDns,
         NavigateBackup,
+        NavigateMihomo,
+        NavigateTun,
+        NavigateSniffer,
+        NavigateResources,
+        NavigateOverride,
+        NavigateSysproxy,
+        NavigateSubStore,
         ToggleSysProxy,
         ToggleTun,
+        SetOutboundRule,
+        SetOutboundGlobal,
+        SetOutboundDirect,
         StartCore,
         StopCore,
     ]
@@ -48,6 +59,9 @@ pub struct ZenClashApp {
     sysproxy_enabled: bool,
     tun_enabled: bool,
     outbound_mode: OutboundMode,
+    upload_speed: u64,
+    download_speed: u64,
+    dashboard_page: Entity<DashboardPage>,
     proxies_page: Entity<ProxiesPage>,
     profiles_page: Entity<ProfilesPage>,
     connections_page: Entity<ConnectionsPage>,
@@ -72,6 +86,7 @@ impl ZenClashApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let dashboard_page = cx.new(|cx| DashboardPage::new(core_manager.clone(), window, cx));
         let proxies_page = cx.new(|cx| ProxiesPage::new(core_manager.clone(), window, cx));
         let profiles_page = cx.new(|cx| ProfilesPage::new(core_manager.clone(), window, cx));
         let connections_page = cx.new(|cx| ConnectionsPage::new(core_manager.clone(), cx));
@@ -99,6 +114,9 @@ impl ZenClashApp {
             sysproxy_enabled: false,
             tun_enabled: false,
             outbound_mode: OutboundMode::default(),
+            upload_speed: 0,
+            download_speed: 0,
+            dashboard_page,
             proxies_page,
             profiles_page,
             connections_page,
@@ -142,7 +160,10 @@ impl ZenClashApp {
                 eprintln!("Failed to start core: {}", e);
             }
             
-            let _ = this.update(cx, |_, cx| cx.notify());
+            let _ = this.update(cx, |this, cx| {
+                this.core_state = CoreState::Running;
+                cx.notify();
+            });
         })
         .detach();
     }
@@ -163,7 +184,10 @@ impl ZenClashApp {
                 eprintln!("Failed to stop core: {}", e);
             }
             
-            let _ = this.update(cx, |_, cx| cx.notify());
+            let _ = this.update(cx, |this, cx| {
+                this.core_state = CoreState::Stopped;
+                cx.notify();
+            });
         })
         .detach();
     }
@@ -239,25 +263,19 @@ impl ZenClashApp {
         cx.notify();
     }
 
+    fn on_navigate_dashboard(&mut self, _: &NavigateDashboard, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::Dashboard, cx);
+    }
+
     fn on_navigate_proxies(&mut self, _: &NavigateProxies, _: &mut Window, cx: &mut Context<Self>) {
         self.navigate(Page::Proxies, cx);
     }
 
-    fn on_navigate_profiles(
-        &mut self,
-        _: &NavigateProfiles,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_navigate_profiles(&mut self, _: &NavigateProfiles, _: &mut Window, cx: &mut Context<Self>) {
         self.navigate(Page::Profiles, cx);
     }
 
-    fn on_navigate_connections(
-        &mut self,
-        _: &NavigateConnections,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_navigate_connections(&mut self, _: &NavigateConnections, _: &mut Window, cx: &mut Context<Self>) {
         self.navigate(Page::Connections, cx);
     }
 
@@ -265,12 +283,7 @@ impl ZenClashApp {
         self.navigate(Page::Logs, cx);
     }
 
-    fn on_navigate_settings(
-        &mut self,
-        _: &NavigateSettings,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_navigate_settings(&mut self, _: &NavigateSettings, _: &mut Window, cx: &mut Context<Self>) {
         self.navigate(Page::Settings, cx);
     }
 
@@ -286,6 +299,34 @@ impl ZenClashApp {
         self.navigate(Page::Backup, cx);
     }
 
+    fn on_navigate_mihomo(&mut self, _: &NavigateMihomo, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::Mihomo, cx);
+    }
+
+    fn on_navigate_tun(&mut self, _: &NavigateTun, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::Tun, cx);
+    }
+
+    fn on_navigate_sniffer(&mut self, _: &NavigateSniffer, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::Sniffer, cx);
+    }
+
+    fn on_navigate_resources(&mut self, _: &NavigateResources, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::Resources, cx);
+    }
+
+    fn on_navigate_override(&mut self, _: &NavigateOverride, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::Override, cx);
+    }
+
+    fn on_navigate_sysproxy(&mut self, _: &NavigateSysproxy, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::Sysproxy, cx);
+    }
+
+    fn on_navigate_substore(&mut self, _: &NavigateSubStore, _: &mut Window, cx: &mut Context<Self>) {
+        self.navigate(Page::SubStore, cx);
+    }
+
     fn on_toggle_sidebar(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {
         self.toggle_sidebar(cx);
     }
@@ -296,6 +337,18 @@ impl ZenClashApp {
 
     fn on_toggle_tun(&mut self, _: &ToggleTun, _: &mut Window, cx: &mut Context<Self>) {
         self.toggle_tun(cx);
+    }
+
+    fn on_set_outbound_rule(&mut self, _: &SetOutboundRule, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_outbound_mode(OutboundMode::Rule, cx);
+    }
+
+    fn on_set_outbound_global(&mut self, _: &SetOutboundGlobal, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_outbound_mode(OutboundMode::Global, cx);
+    }
+
+    fn on_set_outbound_direct(&mut self, _: &SetOutboundDirect, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_outbound_mode(OutboundMode::Direct, cx);
     }
 
     fn on_start_core(&mut self, _: &StartCore, _: &mut Window, cx: &mut Context<Self>) {
@@ -318,10 +371,12 @@ impl ZenClashApp {
             .tun_enabled(self.tun_enabled)
             .outbound_mode(self.outbound_mode)
             .core_state(self.core_state)
+            .traffic(self.upload_speed, self.download_speed)
     }
 
     fn render_content(&self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         match self.current_page {
+            Page::Dashboard => self.dashboard_page.clone().into_any_element(),
             Page::Proxies => self.proxies_page.clone().into_any_element(),
             Page::Profiles => self.profiles_page.clone().into_any_element(),
             Page::Connections => self.connections_page.clone().into_any_element(),

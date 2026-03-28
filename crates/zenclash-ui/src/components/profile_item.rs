@@ -1,10 +1,10 @@
 use gpui::{
-    div, prelude::FluentBuilder, App, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement, Styled, Window,
+    div, prelude::FluentBuilder, App, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
-    button::Button, h_flex, progress::Progress, tag::Tag, ActiveTheme, Disableable, Icon,
-    IconName, Sizable,
+    button::Button, h_flex, progress::Progress, tag::Tag, ActiveTheme, Disableable, Icon, IconName,
+    Sizable,
 };
 use serde::{Deserialize, Serialize};
 

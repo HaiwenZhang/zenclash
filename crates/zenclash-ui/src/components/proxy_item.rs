@@ -1,6 +1,6 @@
 use gpui::{
-    div, prelude::FluentBuilder, App, ClickEvent, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window,
+    div, prelude::FluentBuilder, App, ClickEvent, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
     button::Button, h_flex, v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable,
