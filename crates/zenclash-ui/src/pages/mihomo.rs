@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use gpui::{
     div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
     IntoElement, ParentElement, Render, Styled, Window,
@@ -5,19 +7,14 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::Input,
-    select::Select,
     switch::Switch,
-    tab::Tab,
-    tab::TabBar,
     v_flex, ActiveTheme, Disableable, Sizable,
 };
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
-use super::Page;
 use crate::pages::PageTrait;
+use zenclash_core::prelude::{AppConfig, CoreManager};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CoreType {
@@ -65,6 +62,16 @@ impl LogLevel {
             LogLevel::Silent => "silent",
         }
     }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "debug" => LogLevel::Debug,
+            "warning" => LogLevel::Warning,
+            "error" => LogLevel::Error,
+            "silent" => LogLevel::Silent,
+            _ => LogLevel::Info,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +117,48 @@ impl Default for MihomoSettings {
     }
 }
 
+impl MihomoSettings {
+    pub fn from_app_config(config: &AppConfig) -> Self {
+        Self {
+            core_type: CoreType::from_str(&config.core),
+            mixed_port: config.mixed_port.unwrap_or(7890),
+            socks_port: config.socks_port.unwrap_or(0),
+            http_port: 0,
+            redir_port: config.redir_port.unwrap_or(0),
+            tproxy_port: config.tproxy_port.unwrap_or(0),
+            external_controller: config.external_controller.clone().unwrap_or_else(|| "127.0.0.1:9090".into()),
+            secret: config.secret.clone().unwrap_or_default(),
+            allow_lan: config.allow_lan,
+            ipv6: config.ipv6,
+            log_level: LogLevel::from_str(&config.log_level),
+            find_process_mode: config.find_process_mode.clone().unwrap_or_else(|| "strict".into()),
+            unified_delay: config.unified_delay,
+            tcp_concurrent: config.tcp_concurrent,
+            store_selected: false,
+            store_fake_ip: false,
+        }
+    }
+
+    pub fn to_app_config_patch(&self) -> zenclash_core::prelude::AppConfigPatch {
+        zenclash_core::prelude::AppConfigPatch {
+            core: Some(self.core_type.as_str().to_string()),
+            mixed_port: Some(self.mixed_port),
+            socks_port: if self.socks_port > 0 { Some(self.socks_port) } else { None },
+            redir_port: if self.redir_port > 0 { Some(self.redir_port) } else { None },
+            tproxy_port: if self.tproxy_port > 0 { Some(self.tproxy_port) } else { None },
+            external_controller: Some(self.external_controller.clone()),
+            secret: if self.secret.is_empty() { None } else { Some(self.secret.clone()) },
+            allow_lan: Some(self.allow_lan),
+            ipv6: Some(self.ipv6),
+            log_level: Some(self.log_level.as_str().to_string()),
+            unified_delay: Some(self.unified_delay),
+            tcp_concurrent: Some(self.tcp_concurrent),
+            find_process_mode: Some(self.find_process_mode.clone()),
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmartCoreSettings {
     pub enabled: bool,
@@ -139,6 +188,7 @@ pub enum SmartCoreStrategy {
 }
 
 pub struct MihomoPage {
+    core_manager: Arc<RwLock<CoreManager>>,
     settings: Entity<MihomoSettings>,
     smart_settings: Entity<SmartCoreSettings>,
     core_version: Option<String>,
@@ -146,18 +196,46 @@ pub struct MihomoPage {
 }
 
 impl MihomoPage {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, cx: &mut Context<Self>) -> Self {
+        let settings = AppConfig::load().ok();
+        let mihomo_settings = settings
+            .map(|s| MihomoSettings::from_app_config(&s))
+            .unwrap_or_default();
+
         Self {
-            settings: cx.new(|_| MihomoSettings::default()),
+            core_manager,
+            settings: cx.new(|_| mihomo_settings),
             smart_settings: cx.new(|_| SmartCoreSettings::default()),
             core_version: None,
             is_upgrading: false,
         }
     }
 
+    fn save_settings(&mut self, cx: &mut Context<Self>) {
+        let settings = self.settings.read(cx).clone();
+        let mut config = AppConfig::load().unwrap_or_default();
+        let patch = settings.to_app_config_patch();
+        patch.apply(&mut config);
+        if config.save().is_ok() {
+            let core_manager = self.core_manager.clone();
+            cx.spawn(async move |_, _| {
+                let manager = core_manager.read();
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        manager.restart().await.ok();
+                    })
+                });
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
     fn render_ports_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let settings = self.settings.read(cx);
+        let socks_port_str = if settings.socks_port == 0 { "Disabled".to_string() } else { settings.socks_port.to_string() };
+        let http_port_str = if settings.http_port == 0 { "Disabled".to_string() } else { settings.http_port.to_string() };
 
         v_flex()
             .gap_2()
@@ -180,13 +258,10 @@ impl MihomoPage {
                     .py_2()
                     .child(div().text_sm().child("Mixed Port"))
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(div().w(px(80.)).child(settings.mixed_port.to_string()))
-                            .child(
-                                Switch::new("mixed-port").with_size(gpui_component::Size::Small),
-                            ),
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(settings.mixed_port.to_string()),
                     ),
             )
             .child(
@@ -196,13 +271,10 @@ impl MihomoPage {
                     .py_2()
                     .child(div().text_sm().child("SOCKS Port"))
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(div().w(px(80.)).child(settings.socks_port.to_string()))
-                            .child(
-                                Switch::new("socks-port").with_size(gpui_component::Size::Small),
-                            ),
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(socks_port_str),
                     ),
             )
             .child(
@@ -212,11 +284,10 @@ impl MihomoPage {
                     .py_2()
                     .child(div().text_sm().child("HTTP Port"))
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(div().w(px(80.)).child(settings.http_port.to_string()))
-                            .child(Switch::new("http-port").with_size(gpui_component::Size::Small)),
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(http_port_str),
                     ),
             )
     }
@@ -271,6 +342,8 @@ impl MihomoPage {
     fn render_core_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let settings = self.settings.read(cx);
+        let core_type_str = settings.core_type.as_str().to_string();
+        let log_level_str = settings.log_level.as_str().to_string();
 
         v_flex()
             .gap_2()
@@ -290,23 +363,25 @@ impl MihomoPage {
                     .items_center()
                     .justify_between()
                     .py_2()
+                    .child(div().text_sm().child("Core Type"))
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .child(div().text_sm().child("Core Type:"))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(theme.primary)
-                                    .child(settings.core_type.as_str()),
-                            ),
-                    )
+                        div()
+                            .text_sm()
+                            .text_color(theme.primary)
+                            .child(core_type_str),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().text_sm().child("Version"))
                     .child(
-                        Button::new("upgrade-core")
-                            .child("Upgrade Core")
-                            .primary()
-                            .when(self.is_upgrading, |this| this.disabled(true)),
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(self.core_version.clone().unwrap_or_else(|| "Not running".into())),
                     ),
             )
             .child(
@@ -319,7 +394,20 @@ impl MihomoPage {
                         div()
                             .text_sm()
                             .text_color(theme.muted_foreground)
-                            .child(settings.log_level.as_str()),
+                            .child(log_level_str),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
+                    .child(div().flex_1())
+                    .child(
+                        Button::new("upgrade-core")
+                            .child("Upgrade Core")
+                            .primary()
+                            .when(self.is_upgrading, |this| this.disabled(true)),
                     ),
             )
     }
@@ -349,7 +437,13 @@ impl MihomoPage {
                     .child(
                         Switch::new("smart-core")
                             .with_size(gpui_component::Size::Small)
-                            .checked(smart.enabled),
+                            .checked(smart.enabled)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.smart_settings.update(cx, |s, cx| {
+                                    s.enabled = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .when(smart.enabled, |this| {
@@ -366,7 +460,13 @@ impl MihomoPage {
                                 .child(
                                     Switch::new("lightgbm")
                                         .with_size(gpui_component::Size::XSmall)
-                                        .checked(smart.use_lightgbm),
+                                        .checked(smart.use_lightgbm)
+                                        .on_click(cx.listener(|this, checked, _, cx| {
+                                            this.smart_settings.update(cx, |s, cx| {
+                                                s.use_lightgbm = *checked;
+                                                cx.notify();
+                                            });
+                                        })),
                                 ),
                         )
                         .child(
@@ -378,7 +478,13 @@ impl MihomoPage {
                                 .child(
                                     Switch::new("collect")
                                         .with_size(gpui_component::Size::XSmall)
-                                        .checked(smart.collect_data),
+                                        .checked(smart.collect_data)
+                                        .on_click(cx.listener(|this, checked, _, cx| {
+                                            this.smart_settings.update(cx, |s, cx| {
+                                                s.collect_data = *checked;
+                                                cx.notify();
+                                            });
+                                        })),
                                 ),
                         )
                         .child(
@@ -419,7 +525,13 @@ impl MihomoPage {
                     .child(
                         Switch::new("allow-lan")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.allow_lan),
+                            .checked(settings.allow_lan)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.allow_lan = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .child(
@@ -431,7 +543,13 @@ impl MihomoPage {
                     .child(
                         Switch::new("ipv6")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.ipv6),
+                            .checked(settings.ipv6)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.ipv6 = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .child(
@@ -443,7 +561,13 @@ impl MihomoPage {
                     .child(
                         Switch::new("unified-delay")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.unified_delay),
+                            .checked(settings.unified_delay)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.unified_delay = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .child(
@@ -455,7 +579,13 @@ impl MihomoPage {
                     .child(
                         Switch::new("tcp-concurrent")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.tcp_concurrent),
+                            .checked(settings.tcp_concurrent)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.tcp_concurrent = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .child(
@@ -467,7 +597,13 @@ impl MihomoPage {
                     .child(
                         Switch::new("store-selected")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.store_selected),
+                            .checked(settings.store_selected)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.store_selected = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
     }
@@ -485,8 +621,6 @@ impl PageTrait for MihomoPage {
 
 impl Render for MihomoPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-
         v_flex()
             .size_full()
             .overflow_y_hidden()
@@ -502,7 +636,14 @@ impl Render for MihomoPage {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child("Mihomo Core Settings"),
                     )
-                    .child(Button::new("save").child("Save & Restart").primary()),
+                    .child(
+                        Button::new("save")
+                            .child("Save & Restart")
+                            .primary()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.save_settings(cx);
+                            })),
+                    ),
             )
             .child(self.render_core_section(cx))
             .child(self.render_smart_core_section(cx))

@@ -1,35 +1,50 @@
-use gpui::{prelude::FluentBuilder, InteractiveElement, 
-    div, App, Context, Entity, FocusHandle, Focusable, IntoElement,
+use std::sync::Arc;
+
+use gpui::{
+    div, px, prelude::FluentBuilder, InteractiveElement, StatefulInteractiveElement,
+    App, Context, Entity, FocusHandle, Focusable, IntoElement,
     ParentElement, Render, ScrollHandle, Styled, Window,
 };
 use gpui_component::{
     button::Button,
-    scroll::Scrollable,
     v_flex, h_flex,
     ActiveTheme,
 };
+use parking_lot::RwLock;
+use zenclash_core::prelude::{CoreManager, LogItem};
 
 pub struct LogsPage {
-    logs: Vec<String>,
+    core_manager: Arc<RwLock<CoreManager>>,
+    logs: Vec<LogEntry>,
     max_logs: usize,
     scroll_handle: ScrollHandle,
     focus_handle: FocusHandle,
-    auto_scroll: bool,
+    streaming: bool,
+}
+
+#[derive(Debug, Clone)]
+struct LogEntry {
+    level: String,
+    payload: String,
 }
 
 impl LogsPage {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, _window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
+            core_manager,
             logs: Vec::new(),
             max_logs: 1000,
             scroll_handle: ScrollHandle::new(),
             focus_handle: cx.focus_handle(),
-            auto_scroll: true,
+            streaming: false,
         }
     }
 
-    pub fn add_log(&mut self, log: String, cx: &mut Context<Self>) {
-        self.logs.push(log);
+    fn add_log(&mut self, log: LogItem, cx: &mut Context<Self>) {
+        self.logs.push(LogEntry {
+            level: log.level,
+            payload: log.payload,
+        });
         if self.logs.len() > self.max_logs {
             self.logs.remove(0);
         }
@@ -41,9 +56,55 @@ impl LogsPage {
         cx.notify();
     }
 
-    pub fn set_auto_scroll(&mut self, enabled: bool, cx: &mut Context<Self>) {
-        self.auto_scroll = enabled;
-        cx.notify();
+    fn start_streaming(&mut self, cx: &mut Context<Self>) {
+        if self.streaming {
+            return;
+        }
+        self.streaming = true;
+
+        let core_manager = self.core_manager.clone();
+
+        cx.spawn(async move |this, cx| {
+            loop {
+                let stream_result = {
+                    let manager = core_manager.read();
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            manager.get_logs(Some("info")).await
+                        })
+                    })
+                };
+
+                match stream_result {
+                    Ok(stream) => {
+                        loop {
+                            let log_item = tokio::task::block_in_place(|| {
+                                tokio::runtime::Handle::current().block_on(async {
+                                    stream.next().await
+                                })
+                            });
+
+                            match log_item {
+                                Some(item) => {
+                                    let _ = this.update(cx, |this, cx| {
+                                        this.add_log(item, cx);
+                                    });
+                                }
+                                None => break,
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            })
+                        });
+                    }
+                }
+            }
+        })
+        .detach();
     }
 }
 
@@ -55,6 +116,17 @@ impl Focusable for LogsPage {
 
 impl Render for LogsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.streaming {
+            self.start_streaming(cx);
+        }
+
+        let theme = cx.theme();
+        let error_color = theme.danger;
+        let warn_color = theme.warning;
+        let info_color = theme.accent;
+        let debug_color = theme.muted_foreground;
+        let default_color = theme.foreground;
+
         v_flex()
             .size_full()
             .gap_4()
@@ -86,17 +158,42 @@ impl Render for LogsPage {
             )
             .child(
                 div()
+                    .id("logs-container")
                     .flex_1()
-                    .overflow_hidden()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.scroll_handle)
+                    .bg(cx.theme().background)
+                    .rounded_lg()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .p_2()
                     .child(
                         v_flex()
                             .gap_0()
                             .children(self.logs.iter().map(|log| {
-                                div()
-                                    .p_1()
-                                    .text_sm()
-                                    .font_family("monospace")
-                                    .child(log.clone())
+                                let level_color = match log.level.to_lowercase().as_str() {
+                                    "error" | "fatal" => error_color,
+                                    "warn" | "warning" => warn_color,
+                                    "info" => info_color,
+                                    "debug" | "trace" => debug_color,
+                                    _ => default_color,
+                                };
+                                h_flex()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .min_w(px(60.0))
+                                            .text_color(level_color)
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .child(log.level.clone())
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .text_sm()
+                                            .font_family("monospace")
+                                            .child(log.payload.clone())
+                                    )
                             }))
                     )
             )

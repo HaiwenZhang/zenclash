@@ -1,12 +1,15 @@
+use std::sync::Arc;
+
 use gpui::{AppContext, InteractiveElement, 
-    div, prelude::FluentBuilder, px, App, Context, Entity, IntoElement, ParentElement, Render,
+    div, prelude::FluentBuilder, App, Context, Entity, IntoElement, ParentElement, Render,
     Styled, Window,
 };
-use gpui_component::{Sizable, button::{Button, ButtonVariants}, h_flex, input::Input, switch::Switch, v_flex, ActiveTheme};
+use gpui_component::{Sizable, button::{Button, ButtonVariants}, h_flex, switch::Switch, v_flex, ActiveTheme, Disableable};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use super::Page;
 use crate::pages::PageTrait;
+use zenclash_core::prelude::{CoreManager, MihomoConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SnifferProtocolConfig {
@@ -33,6 +36,26 @@ pub struct SnifferSettings {
     pub skip_dst_address: Vec<String>,
     #[serde(rename = "skip-src-address")]
     pub skip_src_address: Vec<String>,
+}
+
+impl SnifferSettings {
+    pub fn from_mihomo_config(config: &MihomoConfig) -> Self {
+        Self {
+            enable: config.sniff.unwrap_or(true),
+            parse_pure_ip: true,
+            force_dns_mapping: true,
+            override_destination: config.sniff_override_destination.unwrap_or(false),
+            sniff: SnifferProtocols::default(),
+            skip_domain: vec!["+.push.apple.com".into()],
+            force_domain: vec![],
+            skip_dst_address: vec![
+                "91.105.192.0/23".into(),
+                "91.108.4.0/22".into(),
+                "149.154.160.0/20".into(),
+            ],
+            skip_src_address: vec![],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,30 +88,55 @@ impl Default for SnifferProtocols {
 }
 
 pub struct SnifferPage {
+    core_manager: Arc<RwLock<CoreManager>>,
     settings: Entity<SnifferSettings>,
     changed: bool,
 }
 
 impl SnifferPage {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, cx: &mut Context<Self>) -> Self {
+        let mihomo_config_path = zenclash_core::utils::dirs::config_dir().join("config.yaml");
+        let settings = if mihomo_config_path.exists() {
+            MihomoConfig::load(&mihomo_config_path)
+                .ok()
+                .map(|c| SnifferSettings::from_mihomo_config(&c))
+                .unwrap_or_default()
+        } else {
+            SnifferSettings::default()
+        };
+
         Self {
-            settings: cx.new(|_| SnifferSettings {
-                enable: true,
-                parse_pure_ip: true,
-                force_dns_mapping: true,
-                override_destination: false,
-                sniff: SnifferProtocols::default(),
-                skip_domain: vec!["+.push.apple.com".into()],
-                force_domain: vec![],
-                skip_dst_address: vec![
-                    "91.105.192.0/23".into(),
-                    "91.108.4.0/22".into(),
-                    "149.154.160.0/20".into(),
-                ],
-                skip_src_address: vec![],
-            }),
+            core_manager,
+            settings: cx.new(|_| settings),
             changed: false,
         }
+    }
+
+    fn save_settings(&mut self, cx: &mut Context<Self>) {
+        let settings = self.settings.read(cx).clone();
+        
+        let mihomo_config_path = zenclash_core::utils::dirs::config_dir().join("config.yaml");
+        if mihomo_config_path.exists() {
+            if let Ok(mut config) = MihomoConfig::load(&mihomo_config_path) {
+                config.sniff = Some(settings.enable);
+                config.sniff_override_destination = Some(settings.override_destination);
+                config.save(&mihomo_config_path).ok();
+
+                let core_manager = self.core_manager.clone();
+                cx.spawn(async move |_, _| {
+                    let manager = core_manager.read();
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            manager.reload().await.ok();
+                        })
+                    });
+                })
+                .detach();
+            }
+        }
+
+        self.changed = false;
+        cx.notify();
     }
 
     fn render_basic_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -114,7 +162,18 @@ impl SnifferPage {
                     .justify_between()
                     .py_2()
                     .child(div().text_sm().child("Enable Sniffer"))
-                    .child(Switch::new("enable").with_size(gpui_component::Size::Small).checked(settings.enable)),
+                    .child(
+                        Switch::new("enable")
+                            .with_size(gpui_component::Size::Small)
+                            .checked(settings.enable)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.enable = *checked;
+                                    cx.notify();
+                                });
+                                this.changed = true;
+                            })),
+                    ),
             )
             .child(
                 h_flex()
@@ -125,7 +184,14 @@ impl SnifferPage {
                     .child(
                         Switch::new("override-dest")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.override_destination),
+                            .checked(settings.override_destination)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.override_destination = *checked;
+                                    cx.notify();
+                                });
+                                this.changed = true;
+                            })),
                     ),
             )
             .child(
@@ -137,7 +203,14 @@ impl SnifferPage {
                     .child(
                         Switch::new("force-dns")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.force_dns_mapping),
+                            .checked(settings.force_dns_mapping)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.force_dns_mapping = *checked;
+                                    cx.notify();
+                                });
+                                this.changed = true;
+                            })),
                     ),
             )
             .child(
@@ -149,7 +222,14 @@ impl SnifferPage {
                     .child(
                         Switch::new("parse-pure-ip")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.parse_pure_ip),
+                            .checked(settings.parse_pure_ip)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.parse_pure_ip = *checked;
+                                    cx.notify();
+                                });
+                                this.changed = true;
+                            })),
                     ),
             )
     }
@@ -308,7 +388,7 @@ impl PageTrait for SnifferPage {
 
 impl Render for SnifferPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let save_text = if self.changed { "Save *" } else { "Save" };
 
         v_flex()
             .size_full()
@@ -325,7 +405,15 @@ impl Render for SnifferPage {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child("Sniffer Settings"),
                     )
-                    .child(Button::new("save").child("Save").primary()),
+                    .child(
+                        Button::new("save")
+                            .child(save_text)
+                            .primary()
+                            .when(!self.changed, |this| this.disabled(true))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.save_settings(cx);
+                            })),
+                    ),
             )
             .child(self.render_basic_section(cx))
             .child(self.render_ports_section(cx))

@@ -373,6 +373,27 @@ impl CoreManager {
 
         client.close_all_connections().await.map_err(Into::into)
     }
+
+    pub async fn get_logs(&self, level: Option<&str>) -> Result<crate::core::api::LogStream, CoreManagerError> {
+        let client = self.api_client.read().await;
+        let client = client.as_ref().ok_or(CoreManagerError::NotRunning)?;
+
+        client.get_logs(level).await.map_err(Into::into)
+    }
+
+    pub async fn get_providers_proxies(&self) -> Result<crate::core::api::ProvidersResponse, CoreManagerError> {
+        let client = self.api_client.read().await;
+        let client = client.as_ref().ok_or(CoreManagerError::NotRunning)?;
+
+        client.get_providers_proxies().await.map_err(Into::into)
+    }
+
+    pub async fn upgrade_geo(&self) -> Result<(), CoreManagerError> {
+        let client = self.api_client.read().await;
+        let client = client.as_ref().ok_or(CoreManagerError::NotRunning)?;
+
+        client.upgrade_geo().await.map_err(Into::into)
+    }
 }
 
 #[cfg(test)]

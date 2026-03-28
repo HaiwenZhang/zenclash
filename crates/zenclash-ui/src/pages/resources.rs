@@ -1,42 +1,24 @@
+use std::sync::Arc;
+
 use gpui::{
     div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
     IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
-    button::Button, h_flex, progress::Progress, v_flex, ActiveTheme, Disableable, Sizable,
+    button::Button, h_flex, v_flex, ActiveTheme, Disableable, Sizable,
 };
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use zenclash_core::prelude::CoreManager;
 
-use super::Page;
 use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GeoDataInfo {
     pub name: String,
-    pub geo_type: GeoType,
+    pub geo_type: String,
     pub size: u64,
     pub updated_at: Option<String>,
-    pub version: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum GeoType {
-    #[default]
-    GeoIp,
-    GeoSite,
-    Mmdb,
-    Asn,
-}
-
-impl GeoType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            GeoType::GeoIp => "geoip",
-            GeoType::GeoSite => "geosite",
-            GeoType::Mmdb => "mmdb",
-            GeoType::Asn => "asn",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -49,37 +31,58 @@ pub struct ProviderInfo {
 }
 
 pub struct ResourcesPage {
-    geo_data: Entity<Vec<GeoDataInfo>>,
-    proxy_providers: Entity<Vec<ProviderInfo>>,
-    rule_providers: Entity<Vec<ProviderInfo>>,
-    updating_geo: Entity<Option<GeoType>>,
+    core_manager: Arc<RwLock<CoreManager>>,
+    geo_data: Vec<GeoDataInfo>,
+    proxy_providers: Vec<ProviderInfo>,
+    updating_geo: bool,
 }
 
 impl ResourcesPage {
-    pub fn new(cx: &mut Context<Self>) -> Self {
-        Self {
-            geo_data: cx.new(|_| {
-                vec![
-                    GeoDataInfo {
-                        name: "Country.mmdb".into(),
-                        geo_type: GeoType::Mmdb,
-                        size: 5_800_000,
-                        updated_at: Some("2024-01-15".into()),
-                        version: Some("2024011500".into()),
-                    },
-                    GeoDataInfo {
-                        name: "GeoSite.dat".into(),
-                        geo_type: GeoType::GeoSite,
-                        size: 4_200_000,
-                        updated_at: Some("2024-01-14".into()),
-                        version: Some("2024011400".into()),
-                    },
-                ]
-            }),
-            proxy_providers: cx.new(|_| Vec::new()),
-            rule_providers: cx.new(|_| Vec::new()),
-            updating_geo: cx.new(|_| None),
-        }
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, cx: &mut Context<Self>) -> Self {
+        let mut page = Self {
+            core_manager,
+            geo_data: Vec::new(),
+            proxy_providers: Vec::new(),
+            updating_geo: false,
+        };
+        page.refresh_data(cx);
+        page
+    }
+
+    fn refresh_data(&mut self, cx: &mut Context<Self>) {
+        let core_manager = self.core_manager.clone();
+        
+        cx.spawn(async move |this, cx| {
+            let providers_result = {
+                let manager = core_manager.read();
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        manager.get_providers_proxies().await
+                    })
+                })
+            };
+
+            match providers_result {
+                Ok(providers) => {
+                    let provider_infos: Vec<ProviderInfo> = providers.providers.into_iter().map(|(name, p)| {
+                        ProviderInfo {
+                            name,
+                            provider_type: p.provider_type,
+                            vehicle_type: p.vehicle_type.unwrap_or_default(),
+                            updated_at: None,
+                            count: p.proxies.len(),
+                        }
+                    }).collect();
+                    
+                    let _ = this.update(cx, |this, cx| {
+                        this.proxy_providers = provider_infos;
+                        cx.notify();
+                    });
+                }
+                Err(_) => {}
+            }
+        })
+        .detach();
     }
 
     fn format_size(size: u64) -> String {
@@ -92,10 +95,48 @@ impl ResourcesPage {
         }
     }
 
+    fn upgrade_geo(&mut self, cx: &mut Context<Self>) {
+        self.updating_geo = true;
+        cx.notify();
+        
+        let core_manager = self.core_manager.clone();
+        
+        cx.spawn(async move |this, cx| {
+            let result = {
+                let manager = core_manager.read();
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        manager.upgrade_geo().await
+                    })
+                })
+            };
+            
+            let _ = this.update(cx, |this, cx| {
+                this.updating_geo = false;
+                if result.is_ok() {
+                    this.geo_data = vec![
+                        GeoDataInfo {
+                            name: "Country.mmdb".into(),
+                            geo_type: "mmdb".into(),
+                            size: 5_800_000,
+                            updated_at: Some(chrono::Local::now().format("%Y-%m-%d").to_string()),
+                        },
+                        GeoDataInfo {
+                            name: "GeoSite.dat".into(),
+                            geo_type: "geosite".into(),
+                            size: 4_200_000,
+                            updated_at: Some(chrono::Local::now().format("%Y-%m-%d").to_string()),
+                        },
+                    ];
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn render_geo_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let geo_data = self.geo_data.read(cx);
-        let updating = self.updating_geo.read(cx);
 
         v_flex()
             .gap_2()
@@ -116,11 +157,24 @@ impl ResourcesPage {
                     )
                     .child(
                         Button::new("update-geo")
-                            .child("Update All")
-                            .when(updating.is_some(), |this| this.disabled(true)),
+                            .child(if self.updating_geo { "Updating..." } else { "Update All" })
+                            .when(self.updating_geo, |this| this.disabled(true))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.upgrade_geo(cx);
+                            })),
                     ),
             )
-            .children(geo_data.iter().map(|geo| {
+            .when(self.geo_data.is_empty(), |this| {
+                this.child(
+                    div()
+                        .py_4()
+                        .text_center()
+                        .text_sm()
+                        .text_color(theme.muted_foreground)
+                        .child("No GeoIP data found. Click 'Update All' to download."),
+                )
+            })
+            .children(self.geo_data.iter().map(|geo| {
                 v_flex()
                     .gap_1()
                     .p_2()
@@ -147,19 +201,7 @@ impl ResourcesPage {
                                             .bg(theme.primary)
                                             .text_xs()
                                             .text_color(theme.primary_foreground)
-                                            .child(geo.geo_type.as_str().to_uppercase()),
-                                    ),
-                            )
-                            .child(
-                                Button::new(SharedString::from(format!("update-{}", geo.name)))
-                                    .with_size(gpui_component::Size::XSmall)
-                                    .child("Update")
-                                    .when(
-                                        updating
-                                            .as_ref()
-                                            .map(|t| *t == geo.geo_type)
-                                            .unwrap_or(false),
-                                        |this| this.disabled(true),
+                                            .child(geo.geo_type.to_uppercase()),
                                     ),
                             ),
                     )
@@ -171,9 +213,6 @@ impl ResourcesPage {
                             .child(format!("Size: {}", Self::format_size(geo.size)))
                             .when_some(geo.updated_at.as_ref(), |this, date| {
                                 this.child(format!("Updated: {}", date))
-                            })
-                            .when_some(geo.version.as_ref(), |this, v| {
-                                this.child(format!("Version: {}", v))
                             }),
                     )
             }))
@@ -205,9 +244,12 @@ impl ResourcesPage {
                             .child(title.to_string()),
                     )
                     .child(
-                        Button::new(SharedString::from(format!("update-{}-all", title)))
+                        Button::new(SharedString::from(format!("refresh-{}", title)))
                             .with_size(gpui_component::Size::XSmall)
-                            .child("Update All"),
+                            .child("Refresh")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.refresh_data(cx);
+                            })),
                     ),
             )
             .when(providers.is_empty(), |this| {
@@ -241,16 +283,17 @@ impl ResourcesPage {
                                         div()
                                             .text_xs()
                                             .text_color(theme.muted_foreground)
-                                            .child(format!("{} items", provider.count)),
+                                            .child(format!("{} proxies", provider.count)),
                                     ),
                             )
                             .child(
-                                Button::new(SharedString::from(format!(
-                                    "update-provider-{}",
-                                    provider.name
-                                )))
-                                .with_size(gpui_component::Size::XSmall)
-                                .child("Update"),
+                                div()
+                                    .px_1()
+                                    .rounded(theme.radius)
+                                    .bg(theme.secondary)
+                                    .text_xs()
+                                    .text_color(theme.secondary_foreground)
+                                    .child(provider.provider_type.clone()),
                             ),
                     )
                     .when_some(provider.updated_at.as_ref(), |this, date| {
@@ -278,8 +321,7 @@ impl PageTrait for ResourcesPage {
 impl Render for ResourcesPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme().clone();
-        let proxy_providers = self.proxy_providers.read(cx).clone();
-        let rule_providers = self.rule_providers.read(cx).clone();
+        let proxy_providers = self.proxy_providers.clone();
 
         v_flex()
             .size_full()
@@ -294,6 +336,5 @@ impl Render for ResourcesPage {
             )
             .child(self.render_geo_section(cx))
             .child(self.render_provider_section("Proxy Providers", &proxy_providers, cx))
-            .child(self.render_provider_section("Rule Providers", &rule_providers, cx))
     }
 }

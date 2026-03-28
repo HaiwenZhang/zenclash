@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use gpui::{
     div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
@@ -12,10 +14,12 @@ use gpui_component::{
     tab::TabBar,
     v_flex, ActiveTheme, Disableable, Sizable,
 };
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
 use super::Page;
 use crate::pages::PageTrait;
+use zenclash_core::prelude::AppConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SettingsTab {
@@ -66,6 +70,7 @@ pub struct ShortcutSettings {
 }
 
 pub struct SettingsPage {
+    config: Arc<RwLock<AppConfig>>,
     current_tab: SettingsTab,
     general: GeneralSettings,
     mihomo: MihomoSettings,
@@ -76,35 +81,54 @@ pub struct SettingsPage {
 }
 
 impl SettingsPage {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(config: Arc<RwLock<AppConfig>>, cx: &mut Context<Self>) -> Self {
+        let app_config = config.read().clone();
+        let general = GeneralSettings {
+            language: app_config.language.clone(),
+            auto_launch: app_config.auto_launch,
+            auto_check_update: true,
+            silent_start: app_config.silent_start,
+            show_tray: true,
+            show_floating_window: false,
+            theme: app_config.theme.clone(),
+        };
+        let mihomo = MihomoSettings {
+            delay_test_url: app_config.delay_test_url.clone(),
+            delay_test_timeout: 5000,
+            user_agent: String::new(),
+            cpu_priority: "normal".into(),
+        };
+        let webdav = WebDavSettings::default();
+        let shortcuts = ShortcutSettings {
+            show_window: "CmdOrCtrl+Shift+W".into(),
+            toggle_sysproxy: "CmdOrCtrl+Shift+S".into(),
+            toggle_tun: "CmdOrCtrl+Shift+T".into(),
+            rule_mode: "CmdOrCtrl+Shift+R".into(),
+            global_mode: "CmdOrCtrl+Shift+G".into(),
+            direct_mode: "CmdOrCtrl+Shift+D".into(),
+        };
+
         Self {
+            config,
             current_tab: SettingsTab::default(),
-            general: GeneralSettings {
-                language: "en".into(),
-                auto_launch: false,
-                auto_check_update: true,
-                silent_start: false,
-                show_tray: true,
-                show_floating_window: false,
-                theme: "system".into(),
-            },
-            mihomo: MihomoSettings {
-                delay_test_url: "https://www.gstatic.com/generate_204".into(),
-                delay_test_timeout: 5000,
-                user_agent: "".into(),
-                cpu_priority: "normal".into(),
-            },
-            webdav: WebDavSettings::default(),
-            shortcuts: ShortcutSettings {
-                show_window: "CmdOrCtrl+Shift+W".into(),
-                toggle_sysproxy: "CmdOrCtrl+Shift+S".into(),
-                toggle_tun: "CmdOrCtrl+Shift+T".into(),
-                rule_mode: "".into(),
-                global_mode: "".into(),
-                direct_mode: "".into(),
-            },
+            general,
+            mihomo,
+            webdav,
+            shortcuts,
             changed: false,
             focus_handle: cx.focus_handle(),
+        }
+    }
+
+    pub fn save(&self, _cx: &mut Context<Self>) {
+        let mut config = self.config.write();
+        config.language = self.general.language.clone();
+        config.auto_launch = self.general.auto_launch;
+        config.silent_start = self.general.silent_start;
+        config.theme = self.general.theme.clone();
+        config.delay_test_url = self.mihomo.delay_test_url.clone();
+        if let Err(e) = config.save() {
+            eprintln!("Failed to save config: {}", e);
         }
     }
 
@@ -496,7 +520,10 @@ impl Render for SettingsPage {
                         Button::new("save")
                             .child("Save")
                             .primary()
-                            .when(!self.changed, |this| this.disabled(true)),
+                            .when(!self.changed, |this| this.disabled(true))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.save(cx);
+                            })),
                     ),
             )
             .child(

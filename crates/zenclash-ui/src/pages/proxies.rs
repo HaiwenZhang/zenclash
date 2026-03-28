@@ -13,7 +13,7 @@ use gpui_component::{
 };
 use parking_lot::RwLock;
 
-use zenclash_core::prelude::{CoreManager, DelayTestResult, ProxyGroup, ProxyType};
+use zenclash_core::prelude::{CoreManager, DelayTestResult, ProxyGroup, ProxyType, TrafficData};
 
 pub struct ProxiesPage {
     core_manager: Arc<RwLock<CoreManager>>,
@@ -23,6 +23,9 @@ pub struct ProxiesPage {
     search_query: Entity<InputState>,
     delay_results: std::collections::HashMap<String, u32>,
     is_testing_delay: bool,
+    traffic_up: u64,
+    traffic_down: u64,
+    traffic_streaming: bool,
     focus_handle: FocusHandle,
 }
 
@@ -36,6 +39,9 @@ impl ProxiesPage {
             search_query: cx.new(|cx| InputState::new(window, cx).placeholder("Search proxies...")),
             delay_results: std::collections::HashMap::new(),
             is_testing_delay: false,
+            traffic_up: 0,
+            traffic_down: 0,
+            traffic_streaming: false,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -166,6 +172,70 @@ impl ProxiesPage {
         .detach();
     }
 
+    fn start_traffic_stream(&mut self, cx: &mut Context<Self>) {
+        if self.traffic_streaming {
+            return;
+        }
+        self.traffic_streaming = true;
+
+        let core_manager = self.core_manager.clone();
+        cx.spawn(async move |this, cx| {
+            loop {
+                let stream_result = {
+                    let manager = core_manager.read();
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            manager.get_traffic().await
+                        })
+                    })
+                };
+
+                match stream_result {
+                    Ok(stream) => {
+                        loop {
+                            let traffic = tokio::task::block_in_place(|| {
+                                tokio::runtime::Handle::current().block_on(async {
+                                    stream.next().await
+                                })
+                            });
+
+                            match traffic {
+                                Some(data) => {
+                                    let _ = this.update(cx, |this, cx| {
+                                        this.traffic_up = data.up;
+                                        this.traffic_down = data.down;
+                                        cx.notify();
+                                    });
+                                }
+                                None => break,
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            })
+                        });
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn format_traffic(bytes: u64) -> String {
+        if bytes < 1024 {
+            format!("{} B/s", bytes)
+        } else if bytes < 1024 * 1024 {
+            format!("{:.1} KB/s", bytes as f64 / 1024.0)
+        } else if bytes < 1024 * 1024 * 1024 {
+            format!("{:.1} MB/s", bytes as f64 / (1024.0 * 1024.0))
+        } else {
+            format!("{:.1} GB/s", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+        }
+    }
+
     fn render_group_header(&self, group: &ProxyGroup, cx: &Context<Self>) -> impl IntoElement {
         let is_selected = self.selected_group.as_ref() == Some(&group.name);
         let delay_text = if let Some(delay) = group
@@ -254,6 +324,10 @@ impl Focusable for ProxiesPage {
 
 impl Render for ProxiesPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.traffic_streaming {
+            self.start_traffic_stream(cx);
+        }
+
         let theme = cx.theme();
         let search = self.search_query.clone();
 
@@ -270,15 +344,48 @@ impl Render for ProxiesPage {
                             .child("Proxies"),
                     )
                     .child(
-                        Button::new("test-delay")
-                            .primary()
-                            .when(self.is_testing_delay, |this| {
-                                this.label("Testing...").disabled(true)
-                            })
-                            .when(!self.is_testing_delay, |this| this.label("Test Delay"))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.test_delay(cx);
-                            })),
+                        h_flex()
+                            .gap_4()
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(theme.muted_foreground)
+                                            .child("↑")
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .child(Self::format_traffic(self.traffic_up))
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(theme.muted_foreground)
+                                            .child("↓")
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .child(Self::format_traffic(self.traffic_down))
+                                    )
+                            )
+                            .child(
+                                Button::new("test-delay")
+                                    .primary()
+                                    .when(self.is_testing_delay, |this| {
+                                        this.child("Testing...").disabled(true)
+                                    })
+                                    .when(!self.is_testing_delay, |this| this.child("Test Delay"))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.test_delay(cx);
+                                    })),
+                            ),
                     ),
             )
             .child(Input::new(&search))

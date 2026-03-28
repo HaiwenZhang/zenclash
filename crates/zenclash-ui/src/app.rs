@@ -73,17 +73,17 @@ impl ZenClashApp {
         cx: &mut Context<Self>,
     ) -> Self {
         let proxies_page = cx.new(|cx| ProxiesPage::new(core_manager.clone(), window, cx));
-        let profiles_page = cx.new(|cx| ProfilesPage::new(window, cx));
+        let profiles_page = cx.new(|cx| ProfilesPage::new(core_manager.clone(), window, cx));
         let connections_page = cx.new(|cx| ConnectionsPage::new(core_manager.clone(), cx));
         let rules_page = cx.new(|cx| RulesPage::new(core_manager.clone(), cx));
-        let logs_page = cx.new(|cx| LogsPage::new(cx));
-        let settings_page = cx.new(|cx| SettingsPage::new(cx));
+        let logs_page = cx.new(|cx| LogsPage::new(core_manager.clone(), window, cx));
+        let settings_page = cx.new(|cx| SettingsPage::new(config.clone(), cx));
         let dns_page = cx.new(|cx| DnsPage::new(window, cx));
         let backup_page = cx.new(|cx| BackupPage::new(window, cx));
-        let mihomo_page = cx.new(|cx| MihomoPage::new(cx));
-        let tun_page = cx.new(|cx| TunPage::new(cx));
-        let sniffer_page = cx.new(|cx| SnifferPage::new(cx));
-        let resources_page = cx.new(|cx| ResourcesPage::new(cx));
+        let mihomo_page = cx.new(|cx| MihomoPage::new(core_manager.clone(), cx));
+        let tun_page = cx.new(|cx| TunPage::new(core_manager.clone(), cx));
+        let sniffer_page = cx.new(|cx| SnifferPage::new(core_manager.clone(), cx));
+        let resources_page = cx.new(|cx| ResourcesPage::new(core_manager.clone(), cx));
         let override_page = cx.new(|cx| OverridePage::new(cx));
         let sysproxy_page = cx.new(|cx| SysproxyPage::new(cx));
         let substore_page = cx.new(|cx| SubStorePage::new(cx));

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use gpui::{
     div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
     IntoElement, ParentElement, Render, Styled, Window,
@@ -5,17 +7,14 @@ use gpui::{
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::Input,
-    select::Select,
     switch::Switch,
-    tab::Tab,
-    tab::TabBar,
     v_flex, ActiveTheme, Disableable, Sizable,
 };
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use super::Page;
 use crate::pages::PageTrait;
+use zenclash_core::prelude::{AppConfig, CoreManager};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TunStack {
@@ -78,17 +77,91 @@ impl Default for TunSettings {
     }
 }
 
+impl TunSettings {
+    pub fn from_app_config(config: &AppConfig) -> Self {
+        Self {
+            enabled: config.tun_mode,
+            ..Default::default()
+        }
+    }
+
+    pub fn to_app_config_patch(&self) -> zenclash_core::prelude::AppConfigPatch {
+        zenclash_core::prelude::AppConfigPatch {
+            tun_mode: Some(self.enabled),
+            ..Default::default()
+        }
+    }
+}
+
 pub struct TunPage {
+    core_manager: Arc<RwLock<CoreManager>>,
     settings: Entity<TunSettings>,
     has_permission: bool,
 }
 
 impl TunPage {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, cx: &mut Context<Self>) -> Self {
+        let settings = AppConfig::load().ok();
+        let tun_settings = settings
+            .map(|s| TunSettings::from_app_config(&s))
+            .unwrap_or_default();
+
         Self {
-            settings: cx.new(|_| TunSettings::default()),
+            core_manager,
+            settings: cx.new(|_| tun_settings),
             has_permission: false,
         }
+    }
+
+    fn save_settings(&mut self, cx: &mut Context<Self>) {
+        let settings = self.settings.read(cx).clone();
+        let enabled = settings.enabled;
+        
+        let mut config = AppConfig::load().unwrap_or_default();
+        let patch = settings.to_app_config_patch();
+        patch.apply(&mut config);
+        config.save().ok();
+
+        let core_manager = self.core_manager.clone();
+        cx.spawn(async move |_, _| {
+            let manager = core_manager.read();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    if enabled {
+                        manager.enable_tun().await.ok();
+                    } else {
+                        manager.disable_tun().await.ok();
+                    }
+                })
+            });
+        })
+        .detach();
+
+        cx.notify();
+    }
+
+    fn toggle_tun(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.update(cx, |s, cx| {
+            s.enabled = enabled;
+            cx.notify();
+        });
+
+        let core_manager = self.core_manager.clone();
+        cx.spawn(async move |_, _| {
+            let manager = core_manager.read();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    if enabled {
+                        manager.enable_tun().await.ok();
+                    } else {
+                        manager.disable_tun().await.ok();
+                    }
+                })
+            });
+        })
+        .detach();
+
+        cx.notify();
     }
 
     fn render_permission_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -138,6 +211,7 @@ impl TunPage {
     fn render_basic_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let settings = self.settings.read(cx);
+        let stack_str = settings.stack.as_str().to_string();
 
         v_flex()
             .gap_2()
@@ -157,52 +231,27 @@ impl TunPage {
                     .items_center()
                     .justify_between()
                     .py_2()
+                    .child(div().text_sm().child("TUN Mode"))
+                    .child(
+                        Switch::new("tun-enabled")
+                            .with_size(gpui_component::Size::Small)
+                            .checked(settings.enabled)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.toggle_tun(*checked, cx);
+                            })),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .py_2()
                     .child(div().text_sm().child("Stack Mode"))
                     .child(
-                        h_flex()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(theme.radius)
-                                    .when(settings.stack == TunStack::Mixed, |this| {
-                                        this.bg(theme.primary).text_color(theme.primary_foreground)
-                                    })
-                                    .when(settings.stack != TunStack::Mixed, |this| {
-                                        this.bg(theme.muted).text_color(theme.muted_foreground)
-                                    })
-                                    .text_xs()
-                                    .child("Mixed"),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(theme.radius)
-                                    .when(settings.stack == TunStack::Gvisor, |this| {
-                                        this.bg(theme.primary).text_color(theme.primary_foreground)
-                                    })
-                                    .when(settings.stack != TunStack::Gvisor, |this| {
-                                        this.bg(theme.muted).text_color(theme.muted_foreground)
-                                    })
-                                    .text_xs()
-                                    .child("gVisor"),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(theme.radius)
-                                    .when(settings.stack == TunStack::System, |this| {
-                                        this.bg(theme.primary).text_color(theme.primary_foreground)
-                                    })
-                                    .when(settings.stack != TunStack::System, |this| {
-                                        this.bg(theme.muted).text_color(theme.muted_foreground)
-                                    })
-                                    .text_xs()
-                                    .child("System"),
-                            ),
+                        div()
+                            .text_sm()
+                            .text_color(theme.primary)
+                            .child(stack_str),
                     ),
             )
             .child(
@@ -259,7 +308,13 @@ impl TunPage {
                     .child(
                         Switch::new("auto-route")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.auto_route),
+                            .checked(settings.auto_route)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.auto_route = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .when(cfg!(target_os = "linux"), |this| {
@@ -272,7 +327,13 @@ impl TunPage {
                         .child(
                             Switch::new("auto-redirect")
                                 .with_size(gpui_component::Size::Small)
-                                .checked(settings.auto_redirect),
+                                .checked(settings.auto_redirect)
+                                .on_click(cx.listener(|this, checked, _, cx| {
+                                    this.settings.update(cx, |s, cx| {
+                                        s.auto_redirect = *checked;
+                                        cx.notify();
+                                    });
+                                })),
                         ),
                 )
             })
@@ -285,7 +346,13 @@ impl TunPage {
                     .child(
                         Switch::new("auto-detect")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.auto_detect_interface),
+                            .checked(settings.auto_detect_interface)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.auto_detect_interface = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .child(
@@ -297,7 +364,13 @@ impl TunPage {
                     .child(
                         Switch::new("strict-route")
                             .with_size(gpui_component::Size::Small)
-                            .checked(settings.strict_route),
+                            .checked(settings.strict_route)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.settings.update(cx, |s, cx| {
+                                    s.strict_route = *checked;
+                                    cx.notify();
+                                });
+                            })),
                     ),
             )
             .child(
@@ -358,7 +431,15 @@ impl TunPage {
                         .justify_between()
                         .py_2()
                         .child(div().text_sm().child("Auto Set DNS (macOS)"))
-                        .child(Switch::new("auto-set-dns").with_size(gpui_component::Size::Small)),
+                        .child(
+                            Switch::new("auto-set-dns")
+                                .with_size(gpui_component::Size::Small)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.settings.update(cx, |s, cx| {
+                                        cx.notify();
+                                    });
+                                })),
+                        ),
                 )
             })
     }
@@ -376,8 +457,6 @@ impl PageTrait for TunPage {
 
 impl Render for TunPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-
         v_flex()
             .size_full()
             .overflow_y_hidden()
@@ -393,7 +472,14 @@ impl Render for TunPage {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child("TUN Mode Settings"),
                     )
-                    .child(Button::new("save").child("Save & Restart").primary()),
+                    .child(
+                        Button::new("save")
+                            .child("Save & Restart")
+                            .primary()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.save_settings(cx);
+                            })),
+                    ),
             )
             .child(self.render_permission_section(cx))
             .child(self.render_basic_section(cx))
