@@ -1,16 +1,20 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use gpui::{prelude::FluentBuilder, InteractiveElement, SharedString, actions, div, App, Context, IntoElement, ParentElement, Render, Styled, Window};
+use gpui::{
+    actions, div, prelude::FluentBuilder, App, Context, IntoElement,
+    ParentElement, Render, SharedString, Styled, Window,
+};
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::{Input, InputState},
-    select::{Select, SelectState},
-    switch::Switch,
-    v_flex, ActiveTheme,
+    ActiveTheme,
 };
-
-use zenclash_core::prelude::AppConfig;
+use global_hotkey::{
+    GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
+    hotkey::HotKey,
+};
+use parking_lot::Mutex;
 
 actions!(
     zenclash_shortcuts,
@@ -27,62 +31,7 @@ actions!(
     ]
 );
 
-pub struct ShortcutManager {
-    shortcuts: HashMap<String, ShortcutAction>,
-    recording: Option<String>,
-}
-
-impl ShortcutManager {
-    pub fn new() -> Self {
-        let mut shortcuts = HashMap::new();
-
-        shortcuts.insert("showWindow".to_string(), ShortcutAction::ShowWindow);
-        shortcuts.insert(
-            "showFloatingWindow".to_string(),
-            ShortcutAction::ShowFloatingWindow,
-        );
-        shortcuts.insert("toggleSysProxy".to_string(), ShortcutAction::ToggleSysProxy);
-        shortcuts.insert("toggleTun".to_string(), ShortcutAction::ToggleTun);
-        shortcuts.insert("ruleMode".to_string(), ShortcutAction::RuleMode);
-        shortcuts.insert("globalMode".to_string(), ShortcutAction::GlobalMode);
-        shortcuts.insert("directMode".to_string(), ShortcutAction::DirectMode);
-        shortcuts.insert(
-            "quitWithoutCore".to_string(),
-            ShortcutAction::QuitWithoutCore,
-        );
-        shortcuts.insert("restartApp".to_string(), ShortcutAction::RestartApp);
-
-        Self {
-            shortcuts,
-            recording: None,
-        }
-    }
-
-    pub fn register_shortcut(&mut self, key: &str, shortcut: String, cx: &mut Context<Self>) {
-        if let Some(action) = self.shortcuts.get(key) {
-            let action = *action;
-            cx.spawn(async move |_, _| {
-                register_global_shortcut(&shortcut, action).await;
-            })
-            .detach();
-        }
-    }
-
-    pub fn unregister_all(&mut self, cx: &mut Context<Self>) {
-        cx.spawn(async move |_, _| {
-            unregister_all_shortcuts().await;
-        })
-        .detach();
-    }
-}
-
-impl Render for ShortcutManager {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShortcutAction {
     ShowWindow,
     ShowFloatingWindow,
@@ -95,13 +44,246 @@ pub enum ShortcutAction {
     RestartApp,
 }
 
+struct RegisteredHotkey {
+    hotkey: HotKey,
+    action: ShortcutAction,
+}
+
+struct ShortcutManagerState {
+    manager: GlobalHotKeyManager,
+    registered: HashMap<u32, RegisteredHotkey>,
+}
+
+pub struct ShortcutManager {
+    action_map: HashMap<String, ShortcutAction>,
+    state: Arc<Mutex<Option<ShortcutManagerState>>>,
+    initialized: bool,
+}
+
+impl gpui::Global for ShortcutManager {}
+
+impl ShortcutManager {
+    pub fn new() -> Self {
+        let mut action_map = HashMap::new();
+        action_map.insert("showWindow".to_string(), ShortcutAction::ShowWindow);
+        action_map.insert(
+            "showFloatingWindow".to_string(),
+            ShortcutAction::ShowFloatingWindow,
+        );
+        action_map.insert("toggleSysProxy".to_string(), ShortcutAction::ToggleSysProxy);
+        action_map.insert("toggleTun".to_string(), ShortcutAction::ToggleTun);
+        action_map.insert("ruleMode".to_string(), ShortcutAction::RuleMode);
+        action_map.insert("globalMode".to_string(), ShortcutAction::GlobalMode);
+        action_map.insert("directMode".to_string(), ShortcutAction::DirectMode);
+        action_map.insert(
+            "quitWithoutCore".to_string(),
+            ShortcutAction::QuitWithoutCore,
+        );
+        action_map.insert("restartApp".to_string(), ShortcutAction::RestartApp);
+
+        Self {
+            action_map,
+            state: Arc::new(Mutex::new(None)),
+            initialized: false,
+        }
+    }
+
+    pub fn init(cx: &mut App) {
+        let manager = Self::new();
+        cx.set_global(manager);
+        
+        Self::setup_event_handler(cx);
+        Self::register_defaults(cx);
+    }
+
+    fn setup_event_handler(cx: &mut App) {
+        let state = cx.global::<ShortcutManager>().state.clone();
+        
+        GlobalHotKeyEvent::set_event_handler(Some(move |event: GlobalHotKeyEvent| {
+            if event.state == HotKeyState::Pressed {
+                let guard = state.lock();
+                if let Some(manager_state) = guard.as_ref() {
+                    if let Some(registered) = manager_state.registered.get(&event.id) {
+                        Self::dispatch_action(registered.action);
+                    }
+                }
+            }
+        }));
+    }
+
+    fn dispatch_action(action: ShortcutAction) {
+        match action {
+            ShortcutAction::ShowWindow => {
+                tracing::info!("Dispatching ShowWindow action");
+            }
+            ShortcutAction::ShowFloatingWindow => {
+                tracing::info!("Dispatching ShowFloatingWindow action");
+            }
+            ShortcutAction::ToggleSysProxy => {
+                tracing::info!("Dispatching ToggleSysProxy action");
+            }
+            ShortcutAction::ToggleTun => {
+                tracing::info!("Dispatching ToggleTun action");
+            }
+            ShortcutAction::RuleMode => {
+                tracing::info!("Dispatching RuleMode action");
+            }
+            ShortcutAction::GlobalMode => {
+                tracing::info!("Dispatching GlobalMode action");
+            }
+            ShortcutAction::DirectMode => {
+                tracing::info!("Dispatching DirectMode action");
+            }
+            ShortcutAction::QuitWithoutCore => {
+                tracing::info!("Dispatching QuitWithoutCore action");
+            }
+            ShortcutAction::RestartApp => {
+                tracing::info!("Dispatching RestartApp action");
+            }
+        }
+    }
+
+    fn register_defaults(cx: &mut App) {
+        let defaults = [
+            ("showWindow", "CmdOrCtrl+Shift+KeyZ"),
+            ("toggleSysProxy", "CmdOrCtrl+Shift+KeyS"),
+            ("toggleTun", "CmdOrCtrl+Shift+KeyT"),
+            ("ruleMode", "CmdOrCtrl+Shift+KeyR"),
+            ("globalMode", "CmdOrCtrl+Shift+KeyG"),
+            ("directMode", "CmdOrCtrl+Shift+KeyD"),
+        ];
+
+        for (key, shortcut) in defaults {
+            Self::register_shortcut(key, shortcut, cx);
+        }
+    }
+
+    pub fn register_shortcut(key: &str, shortcut: &str, cx: &mut App) {
+        let manager = cx.global::<ShortcutManager>();
+        
+        if let Some(action) = manager.action_map.get(key) {
+            let action = *action;
+            let state = manager.state.clone();
+            let shortcut_str = shortcut.to_string();
+            
+            cx.spawn(async move |_cx| {
+                register_global_shortcut(&shortcut_str, action, state).await;
+            })
+            .detach();
+        }
+    }
+
+    pub fn unregister_all(cx: &mut App) {
+        let manager = cx.global::<ShortcutManager>();
+        let state = manager.state.clone();
+        
+        cx.spawn(async move |_cx| {
+            unregister_all_shortcuts(state).await;
+        })
+        .detach();
+    }
+
+    pub fn check_macos_accessibility() -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            use std::process::Command;
+            Command::new("osascript")
+                .arg("-e")
+                .arg("tell application \"System Events\" to get frontmost process")
+                .output()
+                .is_ok()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            true
+        }
+    }
+
+    pub fn get_default_shortcuts() -> HashMap<String, String> {
+        let mut shortcuts = HashMap::new();
+        shortcuts.insert("showWindow".to_string(), "CmdOrCtrl+Shift+Z".to_string());
+        shortcuts.insert("toggleSysProxy".to_string(), "CmdOrCtrl+Shift+S".to_string());
+        shortcuts.insert("toggleTun".to_string(), "CmdOrCtrl+Shift+T".to_string());
+        shortcuts.insert("ruleMode".to_string(), "CmdOrCtrl+Shift+R".to_string());
+        shortcuts.insert("globalMode".to_string(), "CmdOrCtrl+Shift+G".to_string());
+        shortcuts.insert("directMode".to_string(), "CmdOrCtrl+Shift+D".to_string());
+        shortcuts.insert("quitWithoutCore".to_string(), "CmdOrCtrl+Q".to_string());
+        shortcuts
+    }
+}
+
+impl Render for ShortcutManager {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+    }
+}
+
+async fn register_global_shortcut(
+    shortcut: &str,
+    action: ShortcutAction,
+    state: Arc<Mutex<Option<ShortcutManagerState>>>,
+) {
+    let hotkey: HotKey = match shortcut.parse() {
+        Ok(h) => h,
+        Err(e) => {
+            tracing::error!("Failed to parse hotkey '{}': {}", shortcut, e);
+            return;
+        }
+    };
+
+    let mut guard = state.lock();
+    
+    if guard.is_none() {
+        let manager = match GlobalHotKeyManager::new() {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::error!("Failed to create GlobalHotKeyManager: {}", e);
+                return;
+            }
+        };
+        *guard = Some(ShortcutManagerState {
+            manager,
+            registered: HashMap::new(),
+        });
+    }
+
+    if let Some(manager_state) = guard.as_mut() {
+        match manager_state.manager.register(hotkey) {
+            Ok(_) => {
+                manager_state.registered.insert(
+                    hotkey.id(),
+                    RegisteredHotkey { hotkey, action },
+                );
+                tracing::info!("Registered global hotkey: {} for action {:?}", shortcut, action);
+            }
+            Err(e) => {
+                tracing::error!("Failed to register hotkey '{}': {}", shortcut, e);
+            }
+        }
+    }
+}
+
+async fn unregister_all_shortcuts(state: Arc<Mutex<Option<ShortcutManagerState>>>) {
+    let mut guard = state.lock();
+    
+    if let Some(manager_state) = guard.take() {
+        let hotkeys: Vec<HotKey> = manager_state.registered.values().map(|r| r.hotkey).collect();
+        
+        if let Err(e) = manager_state.manager.unregister_all(&hotkeys) {
+            tracing::error!("Failed to unregister all hotkeys: {}", e);
+        } else {
+            tracing::info!("Unregistered all global hotkeys");
+        }
+    }
+}
+
 pub struct ShortcutsPage {
     shortcuts: HashMap<String, String>,
     recording: Option<String>,
 }
 
 impl ShortcutsPage {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
         let mut shortcuts = HashMap::new();
         shortcuts.insert("showWindow".to_string(), String::new());
         shortcuts.insert("showFloatingWindow".to_string(), String::new());
@@ -190,11 +372,23 @@ impl ShortcutsPage {
                     ),
             )
     }
+
+    #[cfg(target_os = "macos")]
+    fn render_accessibility_warning(&self, cx: &Context<Self>) -> impl IntoElement {
+        div()
+            .text_color(cx.theme().warning)
+            .child("Note: macOS requires Accessibility permissions for global shortcuts")
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn render_accessibility_warning(&self, _cx: &Context<Self>) -> impl IntoElement {
+        div()
+    }
 }
 
 impl Render for ShortcutsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
+        gpui_component::v_flex()
             .size_full()
             .gap_4()
             .child(
@@ -208,8 +402,9 @@ impl Render for ShortcutsPage {
                     .text_color(cx.theme().muted_foreground)
                     .child("Configure global keyboard shortcuts"),
             )
+            .child(self.render_accessibility_warning(cx))
             .child(
-                v_flex()
+                gpui_component::v_flex()
                     .gap_3()
                     .child(self.render_shortcut_row("Show Window", "showWindow", cx))
                     .child(self.render_shortcut_row(
@@ -231,29 +426,8 @@ impl Render for ShortcutsPage {
                         .primary()
                         .label("Save Shortcuts")
                         .on_click(cx.listener(|_, _, _, _| {
-                            // Save shortcuts
                         })),
                 ),
             )
     }
-}
-
-async fn register_global_shortcut(shortcut: &str, action: ShortcutAction) {
-    // Platform-specific implementation
-    #[cfg(target_os = "macos")]
-    {
-        // macOS implementation using CGEventTap or similar
-    }
-    #[cfg(target_os = "windows")]
-    {
-        // Windows implementation using RegisterHotKey
-    }
-    #[cfg(target_os = "linux")]
-    {
-        // Linux implementation using x11 or wayland
-    }
-}
-
-async fn unregister_all_shortcuts() {
-    // Platform-specific implementation
 }

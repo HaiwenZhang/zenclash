@@ -5,7 +5,7 @@ use gpui_component_assets::Assets;
 use parking_lot::RwLock;
 use zenclash_core::config::AppConfig;
 use zenclash_core::core::{CoreManager, CoreManagerConfig};
-use zenclash_ui::{app, window};
+use zenclash_ui::{app, shortcuts, window};
 
 static TOKIO_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
 
@@ -24,6 +24,7 @@ fn main() {
     app.run(move |cx| {
         app::init(cx);
         window::setup_keybindings(cx);
+        shortcuts::ShortcutManager::init(cx);
 
         let app_config = AppConfig::load().unwrap_or_default();
         let manager_config = CoreManagerConfig::from_app_config(&app_config);

@@ -36,5 +36,10 @@ dirs = { workspace = true }
 
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+tray-icon = "0.19"
+
+# Global hotkey support
+global-hotkey = "0.6"
+
 [features]
 default = []
