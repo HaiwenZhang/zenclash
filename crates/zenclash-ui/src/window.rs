@@ -1,9 +1,16 @@
+use std::sync::Arc;
+
 use gpui::{
-    px, App, AppContext, BorrowAppContext, KeyBinding, Window, WindowBounds, WindowOptions,
+    actions, div, px, App, AppContext, Context, Entity, IntoElement, KeyBinding, ParentElement, Render,
+    Styled, Window, WindowBounds, WindowOptions,
 };
-use gpui_component::TitleBar;
+use gpui_component::{h_flex, ActiveTheme, TitleBar};
+use parking_lot::RwLock;
 
 use crate::app::WindowConfig;
+use zenclash_core::prelude::CoreManager;
+
+actions!(zenclash_floating, [ToggleFloatingWindow]);
 
 pub fn default_window_options(cx: &App) -> WindowOptions {
     WindowOptions {
@@ -15,7 +22,7 @@ pub fn default_window_options(cx: &App) -> WindowOptions {
 
 pub fn floating_window_options(cx: &App) -> WindowOptions {
     WindowOptions {
-        window_bounds: Some(WindowBounds::centered(gpui::size(px(120.), px(42.)), cx)),
+        window_bounds: Some(WindowBounds::centered(gpui::size(px(140.), px(50.)), cx)),
         titlebar: None,
         ..Default::default()
     }
@@ -53,32 +60,126 @@ pub fn center_window_on_screen(width: f32, height: f32, cx: &App) -> WindowBound
     WindowBounds::centered(gpui::size(px(width), px(height)), cx)
 }
 
-pub struct FloatingWindowState {
-    pub show_traffic: bool,
-    pub position: Option<(f32, f32)>,
+pub struct FloatingWindowView {
+    core_manager: Arc<RwLock<CoreManager>>,
+    upload_speed: u64,
+    download_speed: u64,
 }
 
-impl gpui::Global for FloatingWindowState {}
+impl FloatingWindowView {
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, _window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let view = Self {
+            core_manager,
+            upload_speed: 0,
+            download_speed: 0,
+        };
+        view.start_traffic_update(cx);
+        view
+    }
 
-impl Default for FloatingWindowState {
-    fn default() -> Self {
-        Self {
-            show_traffic: true,
-            position: None,
+    fn start_traffic_update(&self, cx: &mut Context<Self>) {
+        let core_manager = self.core_manager.clone();
+        cx.spawn(async move |this, cx| {
+            loop {
+                let traffic = {
+                    let manager = core_manager.read();
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            manager.get_traffic().await
+                        })
+                    })
+                };
+
+                if let Ok(stream) = traffic {
+                    let mut stream = stream;
+                    loop {
+                        let data = tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                stream.next().await
+                            })
+                        });
+
+                        match data {
+                            Some(traffic_data) => {
+                                let _ = this.update(cx, |this, cx| {
+                                    this.upload_speed = traffic_data.up;
+                                    this.download_speed = traffic_data.down;
+                                    cx.notify();
+                                });
+                            }
+                            None => break,
+                        }
+                    }
+                }
+
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    })
+                });
+            }
+        })
+        .detach();
+    }
+
+    fn format_speed(bytes: u64) -> String {
+        if bytes < 1024 {
+            format!("{} B/s", bytes)
+        } else if bytes < 1024 * 1024 {
+            format!("{:.1} KB/s", bytes as f64 / 1024.0)
+        } else if bytes < 1024 * 1024 * 1024 {
+            format!("{:.1} MB/s", bytes as f64 / (1024.0 * 1024.0))
+        } else {
+            format!("{:.1} GB/s", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
         }
     }
 }
 
-pub struct FloatingWindow;
-
-impl FloatingWindow {
-    pub fn toggle(cx: &mut App) {
-        cx.update_global(|state: &mut FloatingWindowState, _| {
-            state.show_traffic = !state.show_traffic;
-        });
+impl Render for FloatingWindowView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        
+        div()
+            .size_full()
+            .bg(theme.background.opacity(0.95))
+            .rounded_md()
+            .border_1()
+            .border_color(theme.border)
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_color(gpui::rgb(0x4ade80))
+                            .text_xs()
+                            .child(format!("↑ {}", Self::format_speed(self.upload_speed)))
+                    )
+                    .child(
+                        div()
+                            .text_color(gpui::rgb(0x60a5fa))
+                            .text_xs()
+                            .child(format!("↓ {}", Self::format_speed(self.download_speed)))
+                    )
+            )
     }
+}
 
-    pub fn is_visible(cx: &App) -> bool {
-        cx.read_global(|state: &FloatingWindowState, _| state.show_traffic)
-    }
+pub fn create_floating_window(
+    core_manager: Arc<RwLock<CoreManager>>,
+    cx: &mut App,
+) -> anyhow::Result<()> {
+    let options = floating_window_options(cx);
+    
+    cx.spawn(async move |cx| {
+        cx.open_window(options, |window, cx| {
+            let view = cx.new(|cx| FloatingWindowView::new(core_manager, window, cx));
+            cx.new(|cx| gpui_component::Root::new(view, window, cx))
+        })
+    })
+    .detach();
+
+    Ok(())
 }
