@@ -9,7 +9,7 @@ use zenclash_ui::{app, shortcuts, window};
 
 static TOKIO_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
 
-fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
+pub fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
     TOKIO_RUNTIME
         .get_or_init(|| tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime"))
 }
@@ -17,7 +17,8 @@ fn get_tokio_runtime() -> &'static tokio::runtime::Runtime {
 fn main() {
     tracing_subscriber::fmt::init();
 
-    let _rt = get_tokio_runtime();
+    let rt = get_tokio_runtime();
+    let _guard = rt.enter();
 
     let app = Application::new().with_assets(Assets);
 

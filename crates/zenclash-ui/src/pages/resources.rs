@@ -38,28 +38,22 @@ pub struct ResourcesPage {
 }
 
 impl ResourcesPage {
-    pub fn new(core_manager: Arc<RwLock<CoreManager>>, cx: &mut Context<Self>) -> Self {
-        let mut page = Self {
+    pub fn new(core_manager: Arc<RwLock<CoreManager>>, _cx: &mut Context<Self>) -> Self {
+        Self {
             core_manager,
             geo_data: Vec::new(),
             proxy_providers: Vec::new(),
             updating_geo: false,
-        };
-        page.refresh_data(cx);
-        page
+        }
     }
 
-    fn refresh_data(&mut self, cx: &mut Context<Self>) {
+    pub fn refresh_data(&mut self, cx: &mut Context<Self>) {
         let core_manager = self.core_manager.clone();
         
         cx.spawn(async move |this, cx| {
             let providers_result = {
                 let manager = core_manager.read();
-                tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(async {
-                        manager.get_providers_proxies().await
-                    })
-                })
+                manager.get_providers_proxies().await
             };
 
             match providers_result {
