@@ -1,19 +1,15 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    div, prelude::FluentBuilder, App, AppContext, Context, Entity, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::Input,
     switch::Switch,
-    tab::Tab,
-    tab::TabBar,
     v_flex, ActiveTheme, Disableable, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
-use super::Page;
 use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -286,7 +282,7 @@ impl Focusable for SysproxyPage {
 
 impl Render for SysproxyPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
+        let _theme = cx.theme().clone();
         let settings = self.settings.read(cx).clone();
 
         v_flex()

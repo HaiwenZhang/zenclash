@@ -1,6 +1,5 @@
 use gpui::{InteractiveElement, ParentElement, div, prelude::FluentBuilder, px, App, IntoElement, RenderOnce, Styled, Window};
-use gpui_component::{h_flex, v_flex, ActiveTheme, Sizable};
-use serde::{Deserialize, Serialize};
+use gpui_component::{h_flex, v_flex, ActiveTheme};
 
 use super::ConnectionInfo;
 

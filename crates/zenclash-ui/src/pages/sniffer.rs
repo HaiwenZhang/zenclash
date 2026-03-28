@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use gpui::{AppContext, InteractiveElement, 
-    div, prelude::FluentBuilder, App, Context, Entity, IntoElement, ParentElement, Render,
+use gpui::{AppContext, 
+    div, prelude::FluentBuilder, Context, Entity, IntoElement, ParentElement, Render,
     Styled, Window,
 };
 use gpui_component::{Sizable, button::{Button, ButtonVariants}, h_flex, switch::Switch, v_flex, ActiveTheme, Disableable};

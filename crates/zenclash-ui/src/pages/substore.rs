@@ -1,20 +1,15 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable,
+    div, prelude::FluentBuilder, App, Context, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::Input,
-    switch::Switch,
-    tab::Tab,
-    tab::TabBar,
     tag::Tag,
     v_flex, ActiveTheme, Icon, IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
 
-use super::Page;
 use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

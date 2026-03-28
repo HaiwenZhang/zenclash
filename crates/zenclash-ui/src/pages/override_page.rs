@@ -1,18 +1,15 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    div, prelude::FluentBuilder, AppContext, Context, Entity, InteractiveElement,
     IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::Input,
     switch::Switch,
     v_flex, ActiveTheme, Sizable,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
-use super::Page;
 use crate::pages::PageTrait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

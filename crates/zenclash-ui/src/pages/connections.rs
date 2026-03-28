@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder, App, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    div, prelude::FluentBuilder, App, Context, FocusHandle, Focusable, InteractiveElement,
     IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
@@ -10,7 +10,7 @@ use gpui_component::{
 };
 use parking_lot::RwLock;
 
-use zenclash_core::prelude::{ConnectionItem, CoreManager, CoreState};
+use zenclash_core::prelude::{ConnectionItem, CoreManager};
 
 pub struct ConnectionsPage {
     core_manager: Arc<RwLock<CoreManager>>,

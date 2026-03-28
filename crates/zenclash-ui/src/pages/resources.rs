@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    div, prelude::FluentBuilder, AppContext, Context,
     IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
@@ -320,7 +320,7 @@ impl PageTrait for ResourcesPage {
 
 impl Render for ResourcesPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
+        let _theme = cx.theme().clone();
         let proxy_providers = self.proxy_providers.clone();
 
         v_flex()

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, InteractiveElement,
+    div, prelude::FluentBuilder, AppContext, Context, Entity,
     IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
@@ -435,7 +435,7 @@ impl TunPage {
                             Switch::new("auto-set-dns")
                                 .with_size(gpui_component::Size::Small)
                                 .on_click(cx.listener(|this, _, _, cx| {
-                                    this.settings.update(cx, |s, cx| {
+                                    this.settings.update(cx, |_s, cx| {
                                         cx.notify();
                                     });
                                 })),

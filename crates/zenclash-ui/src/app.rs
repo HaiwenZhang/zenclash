@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use gpui::{
-    actions, div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, Focusable, IntoElement,
-    InteractiveElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
+    actions, px, App, AppContext, Context, Entity, Focusable, IntoElement,
+    InteractiveElement, ParentElement, Render, SharedString, Styled,
     Window, WindowBounds, WindowOptions,
 };
 use gpui_component::{h_flex, v_flex, ActiveTheme, Root, Theme, ThemeMode, TitleBar};

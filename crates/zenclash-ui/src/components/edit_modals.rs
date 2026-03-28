@@ -1,15 +1,12 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    div, prelude::FluentBuilder, px, App, IntoElement, ParentElement,
     RenderOnce, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::Input,
-    select::Select,
-    switch::Switch,
     tag::Tag,
-    v_flex, ActiveTheme, Icon, IconName, Sizable,
+    v_flex, ActiveTheme, Sizable,
 };
 use serde::{Deserialize, Serialize};
 

@@ -2,6 +2,7 @@ use gpui::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use zenclash_core::prelude::*;
+use anyhow::Result;
 
 pub struct UpdaterState {
     pub current_version: String,

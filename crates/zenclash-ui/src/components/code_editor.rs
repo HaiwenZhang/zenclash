@@ -7,7 +7,6 @@ use gpui_component::{
     scroll::ScrollableElement,
     v_flex, ActiveTheme, IconName, Sizable,
 };
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CodeLanguage {

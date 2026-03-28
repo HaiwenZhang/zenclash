@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -6,7 +5,6 @@ use gpui::{
     IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{button::Button, h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable};
-use parking_lot::RwLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastType {

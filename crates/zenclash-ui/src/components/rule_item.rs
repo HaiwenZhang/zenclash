@@ -1,5 +1,5 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    div, prelude::FluentBuilder, App, InteractiveElement, IntoElement, ParentElement,
     RenderOnce, SharedString, Styled, Window,
 };
 use gpui_component::{
@@ -58,7 +58,7 @@ impl RuleItem {
 impl RenderOnce for RuleItem {
     fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let rule_color = self.rule_color(theme);
+        let _rule_color = self.rule_color(theme);
 
         let on_toggle = self.on_toggle.take();
         let on_delete = self.on_delete.take();

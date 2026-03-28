@@ -1,23 +1,18 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::FluentBuilder, px, App, Context, Entity, FocusHandle, Focusable,
+    div, prelude::FluentBuilder, App, Context, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
-    input::Input,
-    select::Select,
     switch::Switch,
-    tab::Tab,
-    tab::TabBar,
     v_flex, ActiveTheme, Disableable, Sizable,
 };
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use super::Page;
 use crate::pages::PageTrait;
 use zenclash_core::prelude::AppConfig;
 

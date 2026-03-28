@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use gpui::{
     actions, div, Action, App, AppContext, Context, Entity, IntoElement, Render, Window,
-    WeakEntity,
 };
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
@@ -530,7 +529,7 @@ impl TrayManager {
     fn start_event_processing(&mut self, cx: &mut Context<Self>) {
         let receiver = self.action_receiver.take();
         let core_manager = self.core_manager.clone();
-        let config = self.config.clone();
+        let _config = self.config.clone();
         
         cx.spawn(async move |this, cx| {
             if let Some(mut receiver) = receiver {

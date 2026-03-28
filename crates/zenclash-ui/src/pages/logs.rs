@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use gpui::{
     div, px, prelude::FluentBuilder, InteractiveElement, StatefulInteractiveElement,
-    App, Context, Entity, FocusHandle, Focusable, IntoElement,
+    App, Context, FocusHandle, Focusable, IntoElement,
     ParentElement, Render, ScrollHandle, Styled, Window,
 };
 use gpui_component::{

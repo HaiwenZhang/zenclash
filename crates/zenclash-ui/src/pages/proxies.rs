@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::{prelude::FluentBuilder, InteractiveElement,
-    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    div, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
     Render, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
@@ -9,11 +9,11 @@ use gpui_component::{
     h_flex,
     input::{Input, InputState},
     v_flex,
-    ActiveTheme, Disableable, Icon, IconName, Sizable,
+    ActiveTheme, Disableable,
 };
 use parking_lot::RwLock;
 
-use zenclash_core::prelude::{CoreManager, DelayTestResult, ProxyGroup, ProxyType, TrafficData};
+use zenclash_core::prelude::{CoreManager, ProxyGroup};
 
 pub struct ProxiesPage {
     core_manager: Arc<RwLock<CoreManager>>,
@@ -323,7 +323,7 @@ impl Focusable for ProxiesPage {
 }
 
 impl Render for ProxiesPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.traffic_streaming {
             self.start_traffic_stream(cx);
         }

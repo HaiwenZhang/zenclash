@@ -1,8 +1,8 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    div, prelude::FluentBuilder, App, InteractiveElement, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable};
+use gpui_component::{h_flex, ActiveTheme, Icon, IconName, Sizable};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

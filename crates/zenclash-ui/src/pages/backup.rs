@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use gpui::{prelude::FluentBuilder, InteractiveElement, AppContext,
+use gpui::{prelude::FluentBuilder, AppContext,
     div, App, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, Styled,
     Window,
 };
@@ -88,7 +88,7 @@ impl Focusable for BackupPage {
 }
 
 impl Render for BackupPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .gap_4()
@@ -240,10 +240,10 @@ async fn backup_to_local() -> anyhow::Result<()> {
 }
 
 async fn backup_to_webdav(
-    url: &str,
-    username: &str,
-    password: &str,
-    dir: &str,
+    _url: &str,
+    _username: &str,
+    _password: &str,
+    _dir: &str,
 ) -> anyhow::Result<()> {
     Ok(())
 }

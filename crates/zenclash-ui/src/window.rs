@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use gpui::{
-    actions, div, px, App, AppContext, Context, Entity, IntoElement, KeyBinding, ParentElement, Render,
+    actions, div, px, App, AppContext, Context, IntoElement, KeyBinding, ParentElement, Render,
     Styled, Window, WindowBounds, WindowOptions,
 };
 use gpui_component::{h_flex, ActiveTheme, TitleBar};
 use parking_lot::RwLock;
 
-use crate::app::WindowConfig;
 use zenclash_core::prelude::CoreManager;
 
 actions!(zenclash_floating, [ToggleFloatingWindow]);
@@ -91,7 +90,7 @@ impl FloatingWindowView {
                 };
 
                 if let Ok(stream) = traffic {
-                    let mut stream = stream;
+                    let stream = stream;
                     loop {
                         let data = tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async {

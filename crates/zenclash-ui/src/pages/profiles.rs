@@ -9,11 +9,10 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
     input::{Input, InputState},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable,
+    v_flex, ActiveTheme, Sizable,
 };
 use parking_lot::RwLock;
 
-use zenclash_core::config::ProfileExtra;
 use zenclash_core::prelude::{CoreManager, HttpClient, ProfileConfig, ProfileItem, ProfileType};
 
 pub struct ProfilesPage {
@@ -67,8 +66,8 @@ impl ProfilesPage {
         self.profiles.push(profile);
         self.save_profiles();
 
-        self.new_profile_url.update(cx, |state, _| {});
-        self.new_profile_name.update(cx, |state, _| {});
+        self.new_profile_url.update(cx, |_state, _| {});
+        self.new_profile_name.update(cx, |_state, _| {});
 
         self.update_status = Some(format!("Profile '{}' added", name));
         cx.notify();
@@ -175,7 +174,7 @@ impl Focusable for ProfilesPage {
 }
 
 impl Render for ProfilesPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let url_input = self.new_profile_url.clone();
         let name_input = self.new_profile_name.clone();
         let theme = cx.theme();

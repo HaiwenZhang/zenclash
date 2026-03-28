@@ -1,17 +1,15 @@
 use gpui::{
-    div, prelude::FluentBuilder, App, AppContext, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Window,
+    div, prelude::FluentBuilder, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
     input::{Input, InputState},
-    select::{Select, SelectState},
     switch::Switch,
-    v_flex, ActiveTheme,
+    v_flex,
 };
 
-use zenclash_core::prelude::{DnsConfig, FallbackFilter};
+use zenclash_core::prelude::DnsConfig;
 
 pub struct DnsPage {
     config: DnsConfig,
@@ -39,7 +37,7 @@ impl DnsPage {
         let server = self.new_nameserver.read(cx).text().to_string();
         if !server.is_empty() {
             self.config.nameserver.push(server);
-            self.new_nameserver.update(cx, |state, _| {});
+            self.new_nameserver.update(cx, |_state, _| {});
             cx.notify();
         }
     }
@@ -94,7 +92,7 @@ impl Focusable for DnsPage {
 }
 
 impl Render for DnsPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .gap_4()

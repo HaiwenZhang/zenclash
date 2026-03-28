@@ -1,9 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, App, InteractiveElement, IntoElement, ParentElement,
+    div, prelude::FluentBuilder, App, InteractiveElement, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement, Styled, Window,
 };
 use gpui_component::{
-    button::Button, h_flex, progress::Progress, tag::Tag, v_flex, ActiveTheme, Disableable, Icon,
+    button::Button, h_flex, progress::Progress, tag::Tag, ActiveTheme, Disableable, Icon,
     IconName, Sizable,
 };
 use serde::{Deserialize, Serialize};
